@@ -2,7 +2,9 @@
 
 A pi extension for running shell commands in the background while you keep working in the chat.
 
-It adds tools for one-off and recurring tasks, shows task state in the pi footer, and opens a keyboard-driven task browser for inspecting output or cancelling work.
+Repository: https://github.com/lucas-stellet/background-tasks-pi
+
+It adds tools for one-off and recurring tasks, shows task state in the pi footer, and opens a keyboard-driven task browser for following live output, inspecting final results, or cancelling work.
 
 ## What it adds
 
@@ -26,13 +28,17 @@ It adds tools for one-off and recurring tasks, shows task state in the pi footer
 - Finished task notifications are queued while the agent is busy and delivered when it becomes idle.
 - Agent tools return text only; the interactive task browser is available through `/tasks`.
 - The task browser updates live while open and lets you inspect status, command output, duration, IDs, and task details.
+- Detail views follow live stdout/stderr while a task is running. When the task finishes, the open detail view refreshes to the completed, failed, or cancelled state without needing to leave and re-enter it.
+- If output follow mode is active, task completion scrolls to the newest final content. If you paused follow mode by scrolling up, the browser preserves your position and keeps scrolling usable.
 - Task results are saved under `.background-tasks/<task-id>/` in the project directory and reloaded on startup.
 
 ## Install
 
-From this repository:
+From GitHub:
 
 ```bash
+git clone https://github.com/lucas-stellet/background-tasks-pi.git
+cd background-tasks-pi
 npm install
 pi -e ./index.ts
 ```
@@ -95,9 +101,13 @@ Use cancel-background-task with:
 taskId: task_...
 ```
 
-## Task browser keys
+## Task browser
 
 The task browser defaults to the current session so old task history does not overwhelm the list. Preferences are saved per project in `.background-tasks/config.json`.
+
+Open it with `/tasks`, select a task, and press `enter` to view details. While a command is running, the detail view can follow live output. When the command reaches a terminal state, the same detail view updates its header, exit code, duration, and final output immediately.
+
+### Keys
 
 - `up` / `down`: move through the task list or scroll details.
 - `/`: search tasks by name, command, ID, or status.
