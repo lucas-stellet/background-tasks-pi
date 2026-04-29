@@ -16,7 +16,7 @@
  * Modal Navigation:
  *   ↑↓ — navigate between tasks or scroll detail
  *   Enter — open selected task detail
- *   Home/End — jump to first/last task; End follows output in detail view
+ *   Home/End — jump to first/last task; Home jumps to top in detail view; End follows output in detail view
  *   x or d — cancel selected running task
  *   f — follow output in detail view
  *   q/Esc — close modal

@@ -288,6 +288,9 @@ export class TaskBrowserModal implements Component {
         this.detailScrollOffset = Math.max(0, this.detailScrollOffset - DETAIL_VIEWPORT_HEIGHT);
       } else if (matchesKey(data, "pagedown")) {
         this.detailScrollOffset += DETAIL_VIEWPORT_HEIGHT;
+      } else if (matchesKey(data, "home")) {
+        this.followOutput = false;
+        this.detailScrollOffset = 0;
       } else if (matchesKey(data, "f") || matchesKey(data, "end")) {
         this.followOutput = true;
         this.lastDetailOutputVersion = -1;
@@ -484,8 +487,8 @@ export class TaskBrowserModal implements Component {
       renderHeader(` Task ${task.id.slice(0, 8)} `, width, this.theme),
       ...visible,
       ...Array(Math.max(0, DETAIL_VIEWPORT_HEIGHT - visible.length)).fill(row("", width, this.theme)),
-      row(scrollInfo ? this.theme.fg("dim", scrollInfo) : this.theme.fg("dim", this.followOutput ? "following output — ↑/pageup pauses" : "scroll paused — f/end to follow"), width, this.theme),
-      renderFooter(" ↑↓ scroll  f/end follow  esc summary  q close ", width, this.theme),
+      row(scrollInfo ? this.theme.fg("dim", scrollInfo) : this.theme.fg("dim", this.followOutput ? "following output — ↑/pageup/home pauses" : "scroll paused — f/end to follow"), width, this.theme),
+      renderFooter(" ↑↓ scroll  home top  f/end follow  esc summary  q close ", width, this.theme),
     ];
   }
 

@@ -119,7 +119,8 @@ In list view, `left` / `right` enters column sort mode and moves between `name`,
 - `p`: cycle period filter: `session`, `24h`, `7d`, `all`.
 - `s`: cycle status filter: `all`, `active`, `completed`, `failed`, `cancelled`.
 - `enter`: open the selected task detail view, or leave search mode.
-- `home` / `end`: jump to the first or last task.
+- `home` / `end` in list view: jump to the first or last task.
+- `home` in detail view: jump to the beginning and pause output follow mode.
 - `pageup` / `pagedown`: scroll details faster; scrolling upward pauses output follow mode.
 - `f` or `end` in detail view: resume following live output and jump to the newest tail.
 - `x` or `d`: cancel the selected active task.

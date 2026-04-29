@@ -34,6 +34,13 @@ describe("TaskBrowserModal source integration", () => {
     assert.match(source, /following output/);
   });
 
+  it("supports jumping to the top of task details with home", async () => {
+    const source = await readFile(new URL("./task-browser-modal.ts", import.meta.url), "utf8");
+
+    assert.match(source, /else if \(matchesKey\(data, "home"\)\) \{\n\s+this\.followOutput = false;\n\s+this\.detailScrollOffset = 0/);
+    assert.match(source, /home top/);
+  });
+
   it("refreshes detail follow state when task status changes without new output", async () => {
     const source = await readFile(new URL("./task-browser-modal.ts", import.meta.url), "utf8");
 
