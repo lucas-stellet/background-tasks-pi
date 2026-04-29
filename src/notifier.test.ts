@@ -69,6 +69,19 @@ describe("NotificationQueue", () => {
     assert.equal(delivered.length, 3);
   });
 
+  it("passes notification status to the notifier", () => {
+    const delivered: Array<{ content: string; status: string }> = [];
+    const notifier: Notifier = {
+      isIdle: () => true,
+      sendMessage: (content, status) => { delivered.push({ content, status }); },
+    };
+
+    const queue = createNotificationQueue(notifier);
+    queue.notify("task done", "completed");
+
+    assert.deepEqual(delivered, [{ content: "🔔 task done", status: "completed" }]);
+  });
+
   it("does not deliver if queue is empty", () => {
     const delivered: string[] = [];
     const notifier: Notifier = {

@@ -28,16 +28,21 @@ export function formatTaskListForAgent(tasks: Task[]): string {
   const lines = [`${tasks.length} background ${plural}:`];
 
   for (const task of tasks) {
-    lines.push(`- ${task.id} | ${task.name} | ${task.status} | ${formatExit(task)} | ${formatDuration(task)} | ${task.command}`);
+    const result = task.resultPath ? ` | result ${task.resultPath}` : "";
+    lines.push(`- ${task.id} | ${task.name} | ${task.status} | ${formatExit(task)} | ${formatDuration(task)} | ${task.command}${result}`);
   }
 
   return lines.join("\n");
 }
 
+export function markTerminalTaskSeen(task: Task): void {
+  if (task.status === "completed" || task.status === "failed" || task.status === "cancelled") {
+    task.resultSeen = true;
+  }
+}
+
 export function markFinishedTasksSeen(tasks: Task[]): void {
   for (const task of tasks) {
-    if (task.status === "completed" || task.status === "failed") {
-      task.resultSeen = true;
-    }
+    markTerminalTaskSeen(task);
   }
 }

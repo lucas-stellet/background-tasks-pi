@@ -2,8 +2,8 @@
  * Background Tasks Extension for pi
  *
  * Tools:
- *   run-background-task  — run a command once, returns immediately
- *   run-recurring-task   — run a command every N seconds until cancelled
+ *   run-background-task  — run a command once from the project cwd, returns immediately
+ *   run-recurring-task   — run a command from the project cwd every N seconds until cancelled
  *   list-background-tasks — returns a textual task list for agents
  *   get-background-task-result — returns task output for agents
  *   cancel-background-task — cancel running/pending/recurring task
@@ -30,7 +30,7 @@ import { createTaskRunner } from "./src/task-runner.ts";
 import { buildFooterText } from "./src/footer.ts";
 import { createNotificationQueue, type Notifier } from "./src/notifier.ts";
 import { TaskBrowserModal } from "./src/task-browser-modal.ts";
-import { filterTasks, formatTaskListForAgent, markFinishedTasksSeen } from "./src/task-utils.ts";
+import { filterTasks, formatTaskListForAgent, markFinishedTasksSeen, markTerminalTaskSeen } from "./src/task-utils.ts";
 
 // ── State ────────────────────────────────────────────────────────────
 let pi: ExtensionAPI | null = null;
@@ -39,13 +39,18 @@ let idle = true;
 
 const notifier: Notifier = {
   isIdle: () => idle,
-  sendMessage: (content) => {
+  sendMessage: (content, status) => {
+    if (status === "completed" || status === "failed") {
+      pi?.sendUserMessage(content);
+      return;
+    }
+
     pi?.sendMessage({
       customType: "background-task",
       content,
       display: true,
-      details: {},
-    }, { deliverAs: "steer", triggerTurn: true });
+      details: { status },
+    });
   },
 };
 
@@ -78,9 +83,9 @@ function getSummary(task: Task): string {
   const emoji = task.status === "completed" ? "✓" : task.status === "failed" ? "✗" : task.status === "recurring" ? "🔄" : task.status === "cancelled" ? "⊘" : "⏳";
   switch (task.status) {
     case "completed":
-      return `${emoji} ${task.name}: exit ${task.exitCode} in ${((task.duration ?? 0) / 1000).toFixed(1)}s`;
+      return `${emoji} ${task.name}: exit ${task.exitCode} in ${((task.duration ?? 0) / 1000).toFixed(1)}s${task.resultPath ? `\nResult: ${task.resultPath}` : ""}`;
     case "failed":
-      return `${emoji} ${task.name}: ${task.error ?? "failed"}`;
+      return `${emoji} ${task.name}: ${task.error ?? "failed"}${task.resultPath ? `\nResult: ${task.resultPath}` : ""}`;
     case "recurring":
       return `${emoji} ${task.name}: recurring every ${task.interval}s`;
     default:
@@ -92,11 +97,13 @@ function getSummary(task: Task): string {
 const runBackgroundTaskTool = defineTool({
   name: "run-background-task",
   label: "Run Background Task",
-  description: "Run a shell command in the background. Returns immediately with a task ID.",
-  promptSnippet: "Run long-running shell commands in background without blocking",
+  description: "Run a shell command in the background from the project cwd. Results are written under .background-tasks/<task-id>. Returns immediately with a task ID.",
+  promptSnippet: "Run long-running shell commands in background from the project cwd without blocking",
   promptGuidelines: [
     "Use run-background-task when the user asks to run a command that may take more than a few seconds: builds, tests, data processing, file searches, etc.",
     "Use run-background-task for any command the user explicitly asks to run in background or async.",
+    "Background commands run from the project cwd, not an isolated temp directory.",
+    "Results are saved under .background-tasks/<task-id>/ with task.json, result.md, stdout.txt, and stderr.txt.",
     "Always give the task a short, descriptive name so the user can identify it in the footer and notifications.",
     "After starting a task, tell the user it's running — they'll get a notification when it completes.",
   ],
@@ -117,8 +124,8 @@ const runBackgroundTaskTool = defineTool({
     updateFooter();
 
     return {
-      content: [{ type: "text", text: `Started: "${task.name}" (${task.id})` }],
-      details: { taskId: task.id, status: task.status },
+      content: [{ type: "text", text: `Started: "${task.name}" (${task.id})\nRunning in: ${task.cwd}\nResult: ${task.resultPath}` }],
+      details: { taskId: task.id, status: task.status, cwd: task.cwd, resultPath: task.resultPath },
     };
   },
 });
@@ -126,10 +133,12 @@ const runBackgroundTaskTool = defineTool({
 const runRecurringTaskTool = defineTool({
   name: "run-recurring-task",
   label: "Run Recurring Task",
-  description: "Run a shell command every N seconds until cancelled. Use cancel-background-task to stop.",
-  promptSnippet: "Run a command repeatedly at fixed intervals until cancelled",
+  description: "Run a shell command from the project cwd every N seconds until cancelled. Results are written under .background-tasks/<task-id>. Use cancel-background-task to stop.",
+  promptSnippet: "Run a command from the project cwd repeatedly at fixed intervals until cancelled",
   promptGuidelines: [
     "Use run-recurring-task when the user wants a command to run repeatedly on a schedule — e.g. polling a status, watching a file, periodic health checks.",
+    "Recurring commands run from the project cwd, not an isolated temp directory.",
+    "Results are saved under .background-tasks/<task-id>/ with task.json, result.md, stdout.txt, and stderr.txt.",
     "The task runs forever until cancelled with cancel-background-task.",
     "Give it a descriptive name so the user can identify it in the footer.",
   ],
@@ -159,8 +168,8 @@ const runRecurringTaskTool = defineTool({
     updateFooter();
 
     return {
-      content: [{ type: "text", text: `Started recurring: "${task.name}" every ${params.interval}s (${task.id})` }],
-      details: { taskId: task.id, status: "recurring" },
+      content: [{ type: "text", text: `Started recurring: "${task.name}" every ${params.interval}s (${task.id})\nRunning in: ${task.cwd}\nResult: ${task.resultPath}` }],
+      details: { taskId: task.id, status: "recurring", cwd: task.cwd, resultPath: task.resultPath },
     };
   },
 });
@@ -203,7 +212,7 @@ const getBackgroundTaskResultTool = defineTool({
     const task = manager.getTask(params.taskId);
     if (!task) return { content: [{ type: "text", text: `Task not found: ${params.taskId}` }], details: { error: "not found" } };
 
-    task.resultSeen = true;
+    markTerminalTaskSeen(task);
     updateFooter();
 
     let output = getSummary(task);

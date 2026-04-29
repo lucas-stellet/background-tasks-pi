@@ -1,3 +1,4 @@
 node_modules/
+.background-tasks/
 *.log
 .DS_Store

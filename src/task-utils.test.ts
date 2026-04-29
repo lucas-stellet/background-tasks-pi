@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { filterTasks, formatTaskListForAgent, markFinishedTasksSeen } from "./task-utils.ts";
+import { filterTasks, formatTaskListForAgent, markFinishedTasksSeen, markTerminalTaskSeen } from "./task-utils.ts";
 import type { Task } from "./task-manager.ts";
 
 function task(status: Task["status"], resultSeen = false): Task {
@@ -23,18 +23,51 @@ describe("extension commands", () => {
     assert.match(source, /registerCommand\("tasks"/);
     assert.doesNotMatch(source, /registerCommand\("list-tasks"/);
   });
+
+  it("tells agents that background commands run from the project cwd", async () => {
+    const source = await readFile(new URL("../index.ts", import.meta.url), "utf8");
+
+    assert.match(source, /project cwd/);
+    assert.match(source, /\.background-tasks/);
+  });
+
+  it("uses user messages for finished-task notifications so they wake the agent", async () => {
+    const source = await readFile(new URL("../index.ts", import.meta.url), "utf8");
+
+    assert.match(source, /status === "completed" \|\| status === "failed"/);
+    assert.match(source, /sendUserMessage\(content\)/);
+  });
+
+  it("does not mark active tasks as seen when fetching task output", async () => {
+    const source = await readFile(new URL("../index.ts", import.meta.url), "utf8");
+
+    assert.match(source, /markTerminalTaskSeen\(task\)/);
+    assert.doesNotMatch(source, /task\.resultSeen = true/);
+  });
 });
 
 describe("task utils", () => {
-  it("marks completed and failed tasks as seen", () => {
-    const tasks = [task("completed"), task("failed"), task("running"), task("recurring")];
+  it("marks completed, failed, and cancelled tasks as seen", () => {
+    const tasks = [task("completed"), task("failed"), task("cancelled"), task("running"), task("recurring")];
 
     markFinishedTasksSeen(tasks);
 
     assert.equal(tasks[0]!.resultSeen, true);
     assert.equal(tasks[1]!.resultSeen, true);
-    assert.equal(tasks[2]!.resultSeen, false);
+    assert.equal(tasks[2]!.resultSeen, true);
     assert.equal(tasks[3]!.resultSeen, false);
+    assert.equal(tasks[4]!.resultSeen, false);
+  });
+
+  it("only marks terminal tasks as seen when a task result is viewed", () => {
+    const activeTasks = [task("pending"), task("queued"), task("running"), task("recurring")];
+    const terminalTasks = [task("completed"), task("failed"), task("cancelled")];
+
+    for (const activeTask of activeTasks) markTerminalTaskSeen(activeTask);
+    for (const terminalTask of terminalTasks) markTerminalTaskSeen(terminalTask);
+
+    assert.deepEqual(activeTasks.map((t) => t.resultSeen), [false, false, false, false]);
+    assert.deepEqual(terminalTasks.map((t) => t.resultSeen), [true, true, true]);
   });
 
   it("filters active tasks", () => {

@@ -1,38 +1,58 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { createTaskRunner } from "./task-runner.ts";
 
 describe("TaskRunner", () => {
-  it("runs a command and calls onTaskComplete", async () => {
+  it("runs a command and writes result files under the project cwd", async () => {
     let completedTask: any = null;
+    const cwd = await mkdtemp(join(tmpdir(), "background-tasks-pi-"));
+    const resultDir = join(cwd, ".background-tasks", "test-1");
 
-    const runner = createTaskRunner({
-      onTaskStart: () => {},
-      onTaskComplete: (task) => { completedTask = task; },
-      onTaskError: () => {},
-      onRecurringCycle: () => {},
-    });
+    try {
+      const runner = createTaskRunner({
+        onTaskStart: () => {},
+        onTaskComplete: (task) => { completedTask = task; },
+        onTaskError: () => {},
+        onRecurringCycle: () => {},
+      });
 
-    const task = {
-      id: "test-1",
-      type: "background" as const,
-      status: "pending" as const,
-      name: "test",
-      command: "echo ok",
-      timeout: 5,
-      createdAt: new Date().toISOString(),
-      resultSeen: false,
-    };
+      const task = {
+        id: "test-1",
+        type: "background" as const,
+        status: "pending" as const,
+        name: "test",
+        command: "pwd; echo ok; echo warn >&2",
+        timeout: 5,
+        createdAt: new Date().toISOString(),
+        resultSeen: false,
+        cwd,
+        resultDir,
+        stdoutPath: join(resultDir, "stdout.txt"),
+        stderrPath: join(resultDir, "stderr.txt"),
+        resultPath: join(resultDir, "result.md"),
+        metadataPath: join(resultDir, "task.json"),
+      };
 
-    await runner.run(task);
+      await runner.run(task);
 
-    // Wait for process to finish
-    await new Promise((resolve) => setTimeout(resolve, 500));
+      // Wait for process to finish
+      await new Promise((resolve) => setTimeout(resolve, 500));
 
-    assert.ok(completedTask);
-    assert.equal(completedTask.status, "completed");
-    assert.equal(completedTask.exitCode, 0);
-    assert.match(completedTask.stdout, /ok/);
+      assert.ok(completedTask);
+      assert.equal(completedTask.status, "completed");
+      assert.equal(completedTask.exitCode, 0);
+      assert.match(completedTask.stdout, /ok/);
+      assert.match(await readFile(task.stdoutPath, "utf8"), new RegExp(`${cwd}\\n.*ok`, "s"));
+      assert.match(await readFile(task.stderrPath, "utf8"), /warn/);
+      assert.match(await readFile(task.resultPath, "utf8"), /# test/);
+      assert.match(await readFile(task.resultPath, "utf8"), /status: completed/);
+      assert.match(await readFile(task.metadataPath, "utf8"), /"status": "completed"/);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
   });
 
   it("reports failure for non-zero exit", async () => {

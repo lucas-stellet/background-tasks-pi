@@ -1,5 +1,8 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { createTaskManager } from "./task-manager.ts";
 
 describe("TaskManager - recurring tasks", () => {
@@ -72,16 +75,56 @@ describe("TaskManager - timeout", () => {
   });
 });
 
-describe("TaskManager - isolation", () => {
-  it("assigns isolated cwd per task", () => {
-    const manager = createTaskManager({});
+describe("TaskManager - project cwd results", () => {
+  it("loads persisted task metadata from .background-tasks on startup", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "background-tasks-pi-manager-"));
+    const resultDir = join(cwd, ".background-tasks", "task-old");
+
+    try {
+      await mkdir(resultDir, { recursive: true });
+      await writeFile(join(resultDir, "task.json"), JSON.stringify({
+        id: "task-old",
+        type: "background",
+        status: "completed",
+        name: "old test",
+        command: "npm test",
+        createdAt: "2026-04-29T00:00:00.000Z",
+        completedAt: "2026-04-29T00:00:01.000Z",
+        exitCode: 0,
+        duration: 1000,
+        resultSeen: false,
+        cwd,
+        resultDir,
+        stdoutPath: join(resultDir, "stdout.txt"),
+        stderrPath: join(resultDir, "stderr.txt"),
+        resultPath: join(resultDir, "result.md"),
+        metadataPath: join(resultDir, "task.json"),
+      }));
+
+      const manager = createTaskManager({ cwd });
+
+      assert.equal(manager.getTasks().length, 1);
+      assert.equal(manager.getTask("task-old")?.name, "old test");
+      assert.equal(manager.getTask("task-old")?.resultPath, join(resultDir, "result.md"));
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it("runs background tasks in the project cwd and stores results under .background-tasks", () => {
+    const manager = createTaskManager({ cwd: "/repo/project" });
 
     const task = manager.createBackground({
-      name: "isolated",
-      command: "ls",
+      name: "project-cwd",
+      command: "pwd",
     });
 
-    assert.ok(task.isolatedDir);
-    assert.match(task.isolatedDir!, /background-tasks\//);
+    assert.equal(task.cwd, "/repo/project");
+    assert.equal(task.resultDir, `/repo/project/.background-tasks/${task.id}`);
+    assert.equal(task.stdoutPath, `/repo/project/.background-tasks/${task.id}/stdout.txt`);
+    assert.equal(task.stderrPath, `/repo/project/.background-tasks/${task.id}/stderr.txt`);
+    assert.equal(task.resultPath, `/repo/project/.background-tasks/${task.id}/result.md`);
+    assert.equal(task.metadataPath, `/repo/project/.background-tasks/${task.id}/task.json`);
+    assert.equal(task.isolatedDir, undefined);
   });
 });

@@ -5,7 +5,7 @@ export interface Notification {
 
 export interface Notifier {
   isIdle: () => boolean;
-  sendMessage: (content: string, summary: string) => void;
+  sendMessage: (content: string, status: string) => void;
 }
 
 export function createNotificationQueue(notifier: Notifier) {
@@ -17,7 +17,7 @@ export function createNotificationQueue(notifier: Notifier) {
     if (notifier.isIdle()) {
       const n = pending.shift();
       if (n) {
-        notifier.sendMessage(`🔔 ${n.summary}`, n.summary);
+        notifier.sendMessage(`🔔 ${n.summary}`, n.status);
       }
     }
   }
@@ -25,7 +25,7 @@ export function createNotificationQueue(notifier: Notifier) {
   function flush(): string[] {
     const delivered: string[] = [];
     for (const n of pending) {
-      notifier.sendMessage(`🔔 ${n.summary}`, n.summary);
+      notifier.sendMessage(`🔔 ${n.summary}`, n.status);
       delivered.push(n.summary);
     }
     pending = [];

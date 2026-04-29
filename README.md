@@ -8,8 +8,8 @@ It adds tools for one-off and recurring tasks, shows task state in the pi footer
 
 ### Tools
 
-- `run-background-task`: run a shell command once and return immediately with a task ID.
-- `run-recurring-task`: run a command every N seconds until cancelled.
+- `run-background-task`: run a shell command once from the project cwd and return immediately with a task ID.
+- `run-recurring-task`: run a command from the project cwd every N seconds until cancelled.
 - `list-background-tasks`: return a textual task list for agents, optionally filtered by status.
 - `get-background-task-result`: return captured output for one task as text.
 - `cancel-background-task`: stop a pending, running, queued, or recurring task.
@@ -25,6 +25,7 @@ It adds tools for one-off and recurring tasks, shows task state in the pi footer
 - Finished task notifications are queued while the agent is busy and delivered when it becomes idle.
 - Agent tools return text only; the interactive task browser is available through `/tasks`.
 - The task browser lets you inspect status, command output, duration, IDs, and task details.
+- Task results are saved under `.background-tasks/<task-id>/` in the project directory and reloaded on startup.
 
 ## Install
 
@@ -53,7 +54,7 @@ The package manifest declares the extension in `package.json`:
 
 ## Usage examples
 
-Run tests without blocking the conversation:
+Run tests from the project cwd without blocking the conversation:
 
 ```text
 Use run-background-task with:
@@ -106,7 +107,7 @@ Project layout:
 
 - `index.ts`: extension entry point, tool registration, commands, footer updates, and lifecycle hooks.
 - `src/task-manager.ts`: task creation, task IDs, in-memory task storage, and status updates.
-- `src/task-runner.ts`: shell process execution, output capture, timeouts, and cancellation.
+- `src/task-runner.ts`: shell process execution, output capture, result-file writing, timeouts, and cancellation.
 - `src/task-browser-modal.ts`: task browser TUI.
 - `src/footer.ts`: footer text formatting.
 - `src/notifier.ts`: queued notification delivery.
@@ -114,9 +115,16 @@ Project layout:
 
 ## Notes
 
-Background tasks run through `/bin/sh -c`. Review commands before running them. Local pi packages and extensions execute with your normal system permissions.
+Background tasks run through `/bin/sh -c` from the project cwd. Review commands before running them. Local pi packages and extensions execute with your normal system permissions.
 
-One-off background tasks use isolated working directories under `/tmp/background-tasks/<task-id>`. Recurring tasks run from the current process working directory.
+Each task writes files to `.background-tasks/<task-id>/`:
+
+- `task.json`: task metadata.
+- `result.md`: human-readable summary.
+- `stdout.txt`: captured standard output.
+- `stderr.txt`: captured standard error.
+
+`.background-tasks/` is ignored by git. Completed results are reloaded when the extension starts again; stale active tasks from a previous session are marked as cancelled.
 
 ## License
 
