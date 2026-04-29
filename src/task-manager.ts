@@ -89,6 +89,10 @@ export function createTaskManager(options: TaskManagerOptions) {
       return task;
     },
 
+    getTask(id: string): Task | undefined {
+      return tasks.get(id);
+    },
+
     getTasks(): Task[] {
       return Array.from(tasks.values());
     },
