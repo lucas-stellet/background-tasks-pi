@@ -30,7 +30,7 @@ import { createTaskRunner } from "./src/task-runner.ts";
 import { buildFooterText } from "./src/footer.ts";
 import { createNotificationQueue, type Notifier } from "./src/notifier.ts";
 import { TaskBrowserModal } from "./src/task-browser-modal.ts";
-import { filterTasks, formatTaskListForAgent, markFinishedTasksSeen, markTerminalTaskSeen } from "./src/task-utils.ts";
+import { filterTasks, formatTaskListForAgent } from "./src/task-utils.ts";
 
 // ── State ────────────────────────────────────────────────────────────
 let pi: ExtensionAPI | null = null;
@@ -190,7 +190,7 @@ const listBackgroundTasksTool = defineTool({
   async execute(_id, params) {
     const taskList = filterTasks(manager.getTasks(), params.filter);
 
-    markFinishedTasksSeen(taskList);
+    manager.markTasksSeen(taskList);
     updateFooter();
 
     return { content: [{ type: "text", text: formatTaskListForAgent(taskList) }], details: { count: taskList.length, tasks: taskList } };
@@ -212,7 +212,7 @@ const getBackgroundTaskResultTool = defineTool({
     const task = manager.getTask(params.taskId);
     if (!task) return { content: [{ type: "text", text: `Task not found: ${params.taskId}` }], details: { error: "not found" } };
 
-    markTerminalTaskSeen(task);
+    manager.markTaskSeen(params.taskId);
     updateFooter();
 
     let output = getSummary(task);
@@ -268,7 +268,7 @@ export default function (piArg: ExtensionAPI) {
         return;
       }
 
-      markFinishedTasksSeen(list);
+      manager.markTasksSeen(list);
       updateFooter();
 
       if (ctx.ui) {

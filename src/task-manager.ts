@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 
 export type TaskStatus = "pending" | "running" | "completed" | "failed" | "cancelled" | "recurring" | "queued";
 export type TaskType = "background" | "recurring";
@@ -65,6 +65,23 @@ export function createTaskManager(options: TaskManagerOptions) {
     };
   }
 
+  function persistTask(task: Task): void {
+    const paths = resultPaths(task.id);
+    task.cwd ??= paths.cwd;
+    task.resultDir ??= paths.resultDir;
+    task.stdoutPath ??= paths.stdoutPath;
+    task.stderrPath ??= paths.stderrPath;
+    task.resultPath ??= paths.resultPath;
+    task.metadataPath ??= paths.metadataPath;
+
+    mkdirSync(task.resultDir, { recursive: true });
+    writeFileSync(task.metadataPath, JSON.stringify(task, null, 2) + "\n");
+  }
+
+  function isTerminal(task: Task): boolean {
+    return task.status === "completed" || task.status === "failed" || task.status === "cancelled";
+  }
+
   function loadPersistedTasks(): void {
     const root = joinPath(cwd, ".background-tasks");
     if (!existsSync(root)) return;
@@ -82,6 +99,7 @@ export function createTaskManager(options: TaskManagerOptions) {
           task.status = "cancelled";
           task.completedAt ??= new Date().toISOString();
           task.error ??= "interrupted by previous session shutdown";
+          persistTask(task);
         }
 
         tasks.set(task.id, task);
@@ -142,7 +160,24 @@ export function createTaskManager(options: TaskManagerOptions) {
       if (!task) throw new Error(`Task not found: ${id}`);
       task.status = "cancelled";
       task.completedAt = new Date().toISOString();
+      persistTask(task);
       return task;
+    },
+
+    markTaskSeen(id: string): Task | undefined {
+      const task = tasks.get(id);
+      if (!task) return undefined;
+      if (isTerminal(task)) {
+        task.resultSeen = true;
+        persistTask(task);
+      }
+      return task;
+    },
+
+    markTasksSeen(taskList: Task[]): void {
+      for (const task of taskList) {
+        this.markTaskSeen(task.id);
+      }
     },
 
     getTask(id: string): Task | undefined {

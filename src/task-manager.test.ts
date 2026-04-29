@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createTaskManager } from "./task-manager.ts";
@@ -106,6 +106,88 @@ describe("TaskManager - project cwd results", () => {
       assert.equal(manager.getTasks().length, 1);
       assert.equal(manager.getTask("task-old")?.name, "old test");
       assert.equal(manager.getTask("task-old")?.resultPath, join(resultDir, "result.md"));
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it("persists seen state for terminal tasks", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "background-tasks-pi-manager-"));
+    const resultDir = join(cwd, ".background-tasks", "task-seen");
+    const metadataPath = join(resultDir, "task.json");
+
+    try {
+      await mkdir(resultDir, { recursive: true });
+      await writeFile(metadataPath, JSON.stringify({
+        id: "task-seen",
+        type: "background",
+        status: "completed",
+        name: "seen test",
+        command: "npm test",
+        createdAt: "2026-04-29T00:00:00.000Z",
+        resultSeen: false,
+        cwd,
+        resultDir,
+        stdoutPath: join(resultDir, "stdout.txt"),
+        stderrPath: join(resultDir, "stderr.txt"),
+        resultPath: join(resultDir, "result.md"),
+        metadataPath,
+      }));
+
+      const manager = createTaskManager({ cwd });
+      manager.markTaskSeen("task-seen");
+
+      assert.equal(manager.getTask("task-seen")?.resultSeen, true);
+      assert.equal(JSON.parse(await readFile(metadataPath, "utf8")).resultSeen, true);
+      assert.equal(createTaskManager({ cwd }).getTask("task-seen")?.resultSeen, true);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it("does not mark active tasks as seen", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "background-tasks-pi-manager-"));
+
+    try {
+      const manager = createTaskManager({ cwd });
+      const task = manager.createBackground({ name: "running test", command: "npm test" });
+
+      manager.markTaskSeen(task.id);
+
+      assert.equal(manager.getTask(task.id)?.resultSeen, false);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it("persists stale active tasks as cancelled on startup", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "background-tasks-pi-manager-"));
+    const resultDir = join(cwd, ".background-tasks", "task-stale");
+    const metadataPath = join(resultDir, "task.json");
+
+    try {
+      await mkdir(resultDir, { recursive: true });
+      await writeFile(metadataPath, JSON.stringify({
+        id: "task-stale",
+        type: "background",
+        status: "running",
+        name: "stale test",
+        command: "npm test",
+        createdAt: "2026-04-29T00:00:00.000Z",
+        resultSeen: false,
+        cwd,
+        resultDir,
+        stdoutPath: join(resultDir, "stdout.txt"),
+        stderrPath: join(resultDir, "stderr.txt"),
+        resultPath: join(resultDir, "result.md"),
+        metadataPath,
+      }));
+
+      createTaskManager({ cwd });
+
+      const persisted = JSON.parse(await readFile(metadataPath, "utf8"));
+      assert.equal(persisted.status, "cancelled");
+      assert.equal(persisted.error, "interrupted by previous session shutdown");
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

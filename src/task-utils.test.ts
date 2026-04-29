@@ -38,11 +38,19 @@ describe("extension commands", () => {
     assert.match(source, /sendUserMessage\(content\)/);
   });
 
-  it("does not mark active tasks as seen when fetching task output", async () => {
+  it("persists seen state through the task manager when task output is viewed", async () => {
     const source = await readFile(new URL("../index.ts", import.meta.url), "utf8");
 
-    assert.match(source, /markTerminalTaskSeen\(task\)/);
+    assert.match(source, /manager\.markTaskSeen\(params\.taskId\)/);
+    assert.doesNotMatch(source, /markTerminalTaskSeen\(task\)/);
     assert.doesNotMatch(source, /task\.resultSeen = true/);
+  });
+
+  it("persists seen state through the task manager when task lists are viewed", async () => {
+    const source = await readFile(new URL("../index.ts", import.meta.url), "utf8");
+
+    assert.match(source, /manager\.markTasksSeen\(taskList\)/);
+    assert.match(source, /manager\.markTasksSeen\(list\)/);
   });
 });
 
