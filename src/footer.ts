@@ -2,14 +2,18 @@ import type { Task } from "./task-manager.ts";
 
 export function buildFooterText(tasks: Task[]): string | undefined {
   const visible = tasks
-    .filter((t) => !t.resultSeen && ["running", "pending", "completed", "failed", "queued"].includes(t.status))
-    .filter((t) => t.type !== "recurring") // recurring tasks use notifications, not footer
+    .filter((t) => !t.resultSeen && ["running", "pending", "completed", "failed", "queued", "recurring"].includes(t.status))
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
   if (visible.length === 0) return undefined;
 
-  const running = visible.filter((t) => t.status === "running" || t.status === "pending" || t.status === "queued");
-  const finished = visible.filter((t) => t.status === "completed" || t.status === "failed");
+  // Recurring tasks count as "running", never as "completed"
+  const running = visible.filter((t) =>
+    t.status === "running" || t.status === "pending" || t.status === "queued" || t.status === "recurring"
+  );
+  const finished = visible.filter((t) =>
+    t.status === "completed" || t.status === "failed"
+  );
 
   const parts: string[] = [];
 

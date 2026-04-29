@@ -67,7 +67,7 @@ function updateFooter(): void {
 }
 
 function getSummary(task: Task): string {
-  const emoji = task.status === "completed" ? "✓" : task.status === "failed" ? "✗" : task.status === "recurring" ? "🔄" : "⏳";
+  const emoji = task.status === "completed" ? "✓" : task.status === "failed" ? "✗" : task.status === "recurring" ? "🔄" : task.status === "cancelled" ? "⊘" : "⏳";
   switch (task.status) {
     case "completed":
       return `${emoji} ${task.name}: exit ${task.exitCode} in ${((task.duration ?? 0) / 1000).toFixed(1)}s`;

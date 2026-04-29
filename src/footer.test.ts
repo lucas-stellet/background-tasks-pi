@@ -50,12 +50,27 @@ describe("buildFooterText", () => {
     assert.equal(result, '📋 "build" running, 1 completed');
   });
 
-  it("excludes recurring tasks", () => {
+  it("includes recurring tasks as running", () => {
+    const result = buildFooterText([
+      task({ type: "recurring", status: "recurring", name: "watch" }),
+    ]);
+    assert.equal(result, '📋 "watch" running');
+  });
+
+  it("mixes recurring and background running", () => {
     const result = buildFooterText([
       task({ type: "recurring", status: "recurring", name: "watch" }),
       task({ status: "running", name: "build" }),
     ]);
-    assert.equal(result, '📋 "build" running');
+    assert.equal(result, '📋 "watch" running, "build" running');
+  });
+
+  it("recurring never shows as completed", () => {
+    const result = buildFooterText([
+      task({ type: "recurring", status: "recurring", name: "watch" }),
+      task({ status: "completed", name: "done" }),
+    ]);
+    assert.equal(result, '📋 "watch" running, 1 completed');
   });
 
   it("excludes seen tasks", () => {
@@ -66,11 +81,12 @@ describe("buildFooterText", () => {
     assert.equal(result, '📋 "build" running');
   });
 
-  it("returns undefined when all tasks are recurring", () => {
+  it("shows recurring tasks even when alone", () => {
     const result = buildFooterText([
       task({ type: "recurring", status: "recurring", name: "watch" }),
     ]);
-    assert.equal(result, undefined);
+    assert.ok(result);
+    assert.equal(result, '📋 "watch" running');
   });
 
   it("shows only completed when no running", () => {
