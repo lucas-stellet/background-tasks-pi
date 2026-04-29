@@ -31,11 +31,11 @@ describe("extension commands", () => {
     assert.match(source, /\.background-tasks/);
   });
 
-  it("uses user messages for finished-task notifications so they wake the agent", async () => {
+  it("uses follow-up user messages for finished-task notifications so busy agents are queued safely", async () => {
     const source = await readFile(new URL("../index.ts", import.meta.url), "utf8");
 
     assert.match(source, /status === "completed" \|\| status === "failed"/);
-    assert.match(source, /sendUserMessage\(content\)/);
+    assert.match(source, /sendUserMessage\(content, \{ deliverAs: "followUp" \}\)/);
   });
 
   it("persists seen state through the task manager when task output is viewed", async () => {

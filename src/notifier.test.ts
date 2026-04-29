@@ -94,4 +94,42 @@ describe("NotificationQueue", () => {
     assert.equal(flushed.length, 0);
     assert.equal(delivered.length, 0);
   });
+
+  it("flushes pending notifications as one combined wake-up message", () => {
+    const delivered: Array<{ content: string; status: string }> = [];
+    const notifier: Notifier = {
+      isIdle: () => false,
+      sendMessage: (content, status) => { delivered.push({ content, status }); },
+    };
+
+    const queue = createNotificationQueue(notifier);
+    queue.notify("task A done", "completed");
+    queue.notify("task B failed", "failed");
+
+    const flushed = queue.flushCombined();
+
+    assert.deepEqual(flushed, ["task A done", "task B failed"]);
+    assert.equal(delivered.length, 1);
+    assert.equal(delivered[0]?.status, "failed");
+    assert.match(delivered[0]?.content ?? "", /🔔 Background task notifications:/);
+    assert.match(delivered[0]?.content ?? "", /- task A done/);
+    assert.match(delivered[0]?.content ?? "", /- task B failed/);
+    assert.equal(queue.getPending().length, 0);
+  });
+
+  it("uses terminal status for a combined wake-up even if a recurring notification is first", () => {
+    const delivered: Array<{ content: string; status: string }> = [];
+    const notifier: Notifier = {
+      isIdle: () => false,
+      sendMessage: (content, status) => { delivered.push({ content, status }); },
+    };
+
+    const queue = createNotificationQueue(notifier);
+    queue.notify("poll tick", "recurring");
+    queue.notify("precommit done", "completed");
+
+    queue.flushCombined();
+
+    assert.equal(delivered[0]?.status, "completed");
+  });
 });

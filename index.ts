@@ -41,7 +41,7 @@ const notifier: Notifier = {
   isIdle: () => idle,
   sendMessage: (content, status) => {
     if (status === "completed" || status === "failed") {
-      pi?.sendUserMessage(content);
+      pi?.sendUserMessage(content, { deliverAs: "followUp" });
       return;
     }
 
@@ -338,6 +338,13 @@ export default function (piArg: ExtensionAPI) {
     currentCtx = ctx;
     idle = true;
     updateFooter();
-    queue.flush();
+
+    // pi still considers the agent active while agent_end listeners are running.
+    // Defer finished-task wake-ups until the runtime has actually cleared activeRun,
+    // and send one combined prompt so multiple completed tasks don't start
+    // competing turns.
+    setTimeout(() => {
+      if (idle) queue.flushCombined();
+    }, 0);
   });
 }

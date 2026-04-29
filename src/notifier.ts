@@ -32,9 +32,25 @@ export function createNotificationQueue(notifier: Notifier) {
     return delivered;
   }
 
+  function flushCombined(): string[] {
+    if (pending.length === 0) return [];
+
+    const delivered = pending.map((n) => n.summary);
+    const status = pending.some((n) => n.status === "failed")
+      ? "failed"
+      : pending.some((n) => n.status === "completed")
+        ? "completed"
+        : pending[0]!.status;
+    const content = [`🔔 Background task notifications:`, ...pending.map((n) => `- ${n.summary}`)].join("\n");
+
+    notifier.sendMessage(content, status);
+    pending = [];
+    return delivered;
+  }
+
   function getPending(): Notification[] {
     return [...pending];
   }
 
-  return { notify, flush, getPending };
+  return { notify, flush, flushCombined, getPending };
 }
