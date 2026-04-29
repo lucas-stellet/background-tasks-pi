@@ -202,6 +202,13 @@ const runBackgroundTaskTool = defineTool({
   name: "run-background-task",
   label: "Run Background Task",
   description: "Run a shell command in the background. Returns immediately with a task ID.",
+  promptSnippet: "Run long-running shell commands in background without blocking",
+  promptGuidelines: [
+    "Use run-background-task when the user asks to run a command that may take more than a few seconds: builds, tests, data processing, file searches, etc.",
+    "Use run-background-task for any command the user explicitly asks to run in background or async.",
+    "Always give the task a short, descriptive name so the user can identify it in the footer and notifications.",
+    "After starting a task, tell the user it's running — they'll get a notification when it completes.",
+  ],
   parameters: Type.Object({
     name: Type.String({ description: "Descriptive name for the task" }),
     command: Type.String({ description: "Shell command to execute" }),
@@ -231,6 +238,11 @@ const listBackgroundTasksTool = defineTool({
   name: "list-background-tasks",
   label: "List Background Tasks",
   description: "List all background tasks with their status. Marks listed tasks as seen (removes from footer).",
+  promptSnippet: "List background tasks with status filter (all/active/completed/failed)",
+  promptGuidelines: [
+    "Use list-background-tasks when the user asks 'what tasks are running?' or wants to see background task status.",
+    "This also clears completed tasks from the footer — use it after tasks finish to clean up the display.",
+  ],
   parameters: Type.Object({
     filter: Type.Optional(StringEnum(["all", "active", "completed", "failed"] as const)),
   }),
@@ -268,6 +280,11 @@ const getBackgroundTaskResultTool = defineTool({
   name: "get-background-task-result",
   label: "Get Task Result",
   description: "Get the result of a completed or failed background task. Marks task as seen.",
+  promptSnippet: "Retrieve stdout/stderr from completed or failed background tasks",
+  promptGuidelines: [
+    "Use get-background-task-result when the user wants to see the output of a specific completed task.",
+    "The user may reference the task by name or ID — match it against the task list.",
+  ],
   parameters: Type.Object({
     taskId: Type.String({ description: "The task ID" }),
   }),
@@ -298,6 +315,11 @@ const cancelBackgroundTaskTool = defineTool({
   name: "cancel-background-task",
   label: "Cancel Task",
   description: "Cancel a running or pending background task",
+  promptSnippet: "Cancel running or pending background tasks by ID",
+  promptGuidelines: [
+    "Use cancel-background-task when the user wants to stop a running task.",
+    "Only pending or running tasks can be cancelled — completed/failed tasks cannot.",
+  ],
   parameters: Type.Object({
     taskId: Type.String({ description: "The task ID to cancel" }),
   }),
