@@ -2,8 +2,13 @@ import type { Task } from "./task-manager.ts";
 
 export function buildFooterText(tasks: Task[]): string | undefined {
   const visible = tasks
-    .filter((t) => !t.resultSeen && ["running", "pending", "completed", "failed", "queued", "recurring"].includes(t.status))
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    .map((task, index) => ({ task, index }))
+    .filter(({ task }) => !task.resultSeen && ["running", "pending", "completed", "failed", "queued", "recurring"].includes(task.status))
+    .sort((a, b) => {
+      const byCreatedAt = new Date(b.task.createdAt).getTime() - new Date(a.task.createdAt).getTime();
+      return byCreatedAt === 0 ? a.index - b.index : byCreatedAt;
+    })
+    .map(({ task }) => task);
 
   if (visible.length === 0) return undefined;
 

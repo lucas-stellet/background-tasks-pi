@@ -4,14 +4,21 @@
  * Tools:
  *   run-background-task  — run a command once, returns immediately
  *   run-recurring-task   — run a command every N seconds until cancelled
- *   list-background-tasks — list all tasks with status filter
- *   get-background-task-result — get stdout/stderr of completed task
+ *   list-background-tasks — opens modal task browser with navigation
+ *   get-background-task-result — opens modal task browser with specific task selected
  *   cancel-background-task — cancel running/pending/recurring task
  *
  * Commands:
  *   /run-task <name> <cmd>
- *   /list-tasks
- *   /tasks
+ *   /list-tasks — opens modal task browser
+ *   /tasks — opens modal task browser
+ *
+ * Modal Navigation:
+ *   ↑↓ — navigate between tasks or scroll detail
+ *   Enter — open selected task detail
+ *   Home/End — jump to first/last task
+ *   x or d — cancel selected running task
+ *   q/Esc — close modal
  *
  * Footer: shows up to 2 running tasks by name, + counts for rest
  * Notifications: queued when agent busy, delivered immediately when idle
@@ -23,6 +30,8 @@ import { createTaskManager, type Task } from "./src/task-manager.ts";
 import { createTaskRunner } from "./src/task-runner.ts";
 import { buildFooterText } from "./src/footer.ts";
 import { createNotificationQueue, type Notifier } from "./src/notifier.ts";
+import { TaskBrowserModal } from "./src/task-browser-modal.ts";
+import { filterTasks, markFinishedTasksSeen } from "./src/task-utils.ts";
 
 // ── State ────────────────────────────────────────────────────────────
 let pi: ExtensionAPI | null = null;
@@ -160,59 +169,114 @@ const runRecurringTaskTool = defineTool({
 const listBackgroundTasksTool = defineTool({
   name: "list-background-tasks",
   label: "List Background Tasks",
-  description: "List all background tasks with their status. Marks listed tasks as seen (removes from footer).",
+  description: "List all background tasks with their status. Opens a modal browser for navigation.",
   promptSnippet: "List background tasks with status filter (all/active/completed/failed)",
   promptGuidelines: [
     "Use list-background-tasks when the user asks 'what tasks are running?' or wants to see background task status.",
-    "This also clears completed tasks from the footer — use it after tasks finish to clean up the display.",
+    "This opens a modal browser where you can navigate between tasks and see their details.",
+    "Use arrow keys to navigate, x to cancel a running task, Esc to close.",
   ],
   parameters: Type.Object({
     filter: Type.Optional(StringEnum(["all", "active", "completed", "failed"] as const)),
   }),
 
-  async execute(_id, params) {
-    let taskList = manager.getTasks();
-
-    if (params.filter === "active") {
-      taskList = taskList.filter((t) => t.status === "pending" || t.status === "running" || t.status === "queued" || t.status === "recurring");
-    } else if (params.filter === "completed") {
-      taskList = taskList.filter((t) => t.status === "completed");
-    } else if (params.filter === "failed") {
-      taskList = taskList.filter((t) => t.status === "failed");
-    }
-
-    // Mark all finished as seen
-    for (const t of taskList) {
-      if (t.status === "completed" || t.status === "failed") t.resultSeen = true;
-    }
-    updateFooter();
+  async execute(_id, params, _signal, _onUpdate, ctx) {
+    const taskList = filterTasks(manager.getTasks(), params.filter);
 
     if (taskList.length === 0) {
       return { content: [{ type: "text", text: "No background tasks found." }], details: { count: 0 } };
     }
 
-    const summary = taskList.map(getSummary).join("\n");
-    return { content: [{ type: "text", text: `Tasks (${taskList.length}):\n${summary}` }], details: { count: taskList.length } };
+    markFinishedTasksSeen(taskList);
+    updateFooter();
+
+    // Open the task browser modal
+    if (ctx?.ui) {
+      await ctx.ui.custom((tui, theme, _kb, done) => {
+        const handleCancel = (taskId: string) => {
+          const task = manager.getTask(taskId);
+          if (task && ["pending", "running", "queued", "recurring"].includes(task.status)) {
+            runner.cancel(taskId);
+            manager.cancelTask(taskId);
+            updateFooter();
+          }
+        };
+
+        const modal = new TaskBrowserModal({
+          tasks: taskList,
+          tui,
+          theme,
+          onClose: () => done(undefined),
+          onCancel: handleCancel,
+        });
+
+        return {
+          render: (width: number) => modal.render(width),
+          invalidate: () => modal.invalidate(),
+          handleInput: (data: string) => {
+            modal.handleInput(data);
+            tui.requestRender();
+          },
+        };
+      }, { overlay: true });
+    }
+
+    return { content: [{ type: "text", text: `Opened task browser with ${taskList.length} tasks. Use arrow keys to navigate, Esc to close.` }], details: { count: taskList.length } };
   },
 });
 
 const getBackgroundTaskResultTool = defineTool({
   name: "get-background-task-result",
   label: "Get Task Result",
-  description: "Get the result of a completed or failed background task. Marks task as seen.",
+  description: "Get the result of a completed or failed background task. Opens a modal browser.",
   promptSnippet: "Retrieve stdout/stderr from completed or failed background tasks",
   promptGuidelines: [
     "Use get-background-task-result when the user wants to see the output of a specific completed task.",
-    "The user may reference the task by name or ID — match it against the task list.",
+    "Opens a modal browser with the specified task selected for detailed viewing.",
   ],
   parameters: Type.Object({ taskId: Type.String({ description: "The task ID" }) }),
 
-  async execute(_id, params) {
+  async execute(_id, params, _signal, _onUpdate, ctx) {
     const task = manager.getTask(params.taskId);
     if (!task) return { content: [{ type: "text", text: `Task not found: ${params.taskId}` }], details: { error: "not found" } };
 
     task.resultSeen = true;
     updateFooter();
+
+    // Open the task browser modal with the specific task selected
+    if (ctx?.ui) {
+      const allTasks = manager.getTasks();
+      const selectedIndex = allTasks.findIndex((t) => t.id === params.taskId);
+
+      await ctx.ui.custom((tui, theme, _kb, done) => {
+        const handleCancel = (taskId: string) => {
+          const t = manager.getTask(taskId);
+          if (t && ["pending", "running", "queued", "recurring"].includes(t.status)) {
+            runner.cancel(taskId);
+            manager.cancelTask(taskId);
+            updateFooter();
+          }
+        };
+
+        const modal = new TaskBrowserModal({
+          tasks: allTasks,
+          tui,
+          theme,
+          selectedIndex: selectedIndex >= 0 ? selectedIndex : 0,
+          onClose: () => done(undefined),
+          onCancel: handleCancel,
+        });
+
+        return {
+          render: (width: number) => modal.render(width),
+          invalidate: () => modal.invalidate(),
+          handleInput: (data: string) => {
+            modal.handleInput(data);
+            tui.requestRender();
+          },
+        };
+      }, { overlay: true });
+    }
 
     let output = getSummary(task);
     if (task.stdout) output += `\n\nSTDOUT:\n${task.stdout}`;
@@ -259,14 +323,46 @@ export default function (piArg: ExtensionAPI) {
   pi.registerTool(cancelBackgroundTaskTool);
 
   pi.registerCommand("tasks", {
-    description: "Show background task status",
+    description: "Open task browser modal",
     handler: async (_args, ctx) => {
       const list = manager.getTasks();
-      const running = list.filter((t) => ["running", "pending", "queued", "recurring"].includes(t.status)).length;
-      const completed = list.filter((t) => t.status === "completed").length;
-      const failed = list.filter((t) => t.status === "failed").length;
-      if (list.length === 0) ctx.ui.notify("No background tasks", "info");
-      else ctx.ui.notify(`${running} active, ${completed} completed, ${failed} failed`, "info");
+      if (list.length === 0) {
+        ctx.ui.notify("No background tasks", "info");
+        return;
+      }
+
+      markFinishedTasksSeen(list);
+      updateFooter();
+
+      if (ctx.ui) {
+        await ctx.ui.custom((tui, theme, _kb, done) => {
+          const handleCancel = (taskId: string) => {
+            const task = manager.getTask(taskId);
+            if (task && ["pending", "running", "queued", "recurring"].includes(task.status)) {
+              runner.cancel(taskId);
+              manager.cancelTask(taskId);
+              updateFooter();
+            }
+          };
+
+          const modal = new TaskBrowserModal({
+            tasks: list,
+            tui,
+            theme,
+            onClose: () => done(undefined),
+            onCancel: handleCancel,
+          });
+
+          return {
+            render: (width: number) => modal.render(width),
+            invalidate: () => modal.invalidate(),
+            handleInput: (data: string) => {
+              modal.handleInput(data);
+              tui.requestRender();
+            },
+          };
+        }, { overlay: true });
+      }
     },
   });
 
@@ -277,7 +373,8 @@ export default function (piArg: ExtensionAPI) {
       const parts = args.match(/^(\S+)\s+(.+)$/);
       if (!parts) { pi!.sendMessage({ customType: "background-task", content: "Usage: /run-task <name> <command>", display: true }); return; }
       const [, name, command] = parts;
-      const task = manager.createBackground({ name, command, timeout: 300 });
+      const cleanCommand = command.replace(/^(["'])(.*)\1$/, "$2");
+      const task = manager.createBackground({ name, command: cleanCommand, timeout: 300 });
       runner.run(task);
       updateFooter();
       pi!.sendMessage({ customType: "background-task", content: `Started: "${name}" (${task.id})`, display: true, details: { taskId: task.id } });
@@ -285,18 +382,46 @@ export default function (piArg: ExtensionAPI) {
   });
 
   pi.registerCommand("list-tasks", {
-    description: "List all background tasks and their status",
-    handler: async () => {
+    description: "Open task browser modal",
+    handler: async (_args, ctx) => {
       const list = manager.getTasks();
-      if (list.length === 0) { pi!.sendMessage({ customType: "background-task", content: "No background tasks.", display: true }); return; }
-      for (const t of list) { if (t.status === "completed" || t.status === "failed") t.resultSeen = true; }
-      updateFooter();
-      let output = `Tasks (${list.length}):\n`;
-      for (const t of list) {
-        output += `${getSummary(t)}\n`;
-        if (t.stdout) output += `  STDOUT: ${t.stdout.trim().split("\n").slice(0, 3).join(" | ")}\n`;
+      if (list.length === 0) {
+        ctx.ui?.notify("No background tasks", "info");
+        return;
       }
-      pi!.sendMessage({ customType: "background-task", content: output, display: true, details: { count: list.length } });
+
+      markFinishedTasksSeen(list);
+      updateFooter();
+
+      if (ctx.ui) {
+        await ctx.ui.custom((tui, theme, _kb, done) => {
+          const handleCancel = (taskId: string) => {
+            const task = manager.getTask(taskId);
+            if (task && ["pending", "running", "queued", "recurring"].includes(task.status)) {
+              runner.cancel(taskId);
+              manager.cancelTask(taskId);
+              updateFooter();
+            }
+          };
+
+          const modal = new TaskBrowserModal({
+            tasks: list,
+            tui,
+            theme,
+            onClose: () => done(undefined),
+            onCancel: handleCancel,
+          });
+
+          return {
+            render: (width: number) => modal.render(width),
+            invalidate: () => modal.invalidate(),
+            handleInput: (data: string) => {
+              modal.handleInput(data);
+              tui.requestRender();
+            },
+          };
+        }, { overlay: true });
+      }
     },
   });
 
