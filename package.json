@@ -1,0 +1,11 @@
+{
+  "name": "background-tasks-pi",
+  "version": "1.0.0",
+  "description": "Background task execution extension for pi — run shell commands asynchronously with footer status and notification queue",
+  "keywords": ["pi-package", "pi-extension", "background", "tasks"],
+  "author": "",
+  "license": "MIT",
+  "pi": {
+    "extensions": ["./index.ts"]
+  }
+}
