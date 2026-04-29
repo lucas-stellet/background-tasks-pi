@@ -107,9 +107,14 @@ The task browser defaults to the current session so old task history does not ov
 
 Open it with `/tasks`, select a task, and press `enter` to view details. While a command is running, the detail view can follow live output. When the command reaches a terminal state, the same detail view updates its header, exit code, duration, and final output immediately.
 
+In list view, `left` / `right` enters column sort mode and moves between `name`, `status`, `time`, and `id`. While sort mode is active, the footer changes to show its controls: `left` / `right` chooses the column, `enter` toggles ascending/descending order, and `escape` exits sort mode.
+
 ### Keys
 
 - `up` / `down`: move through the task list or scroll details.
+- `left` / `right` in list view: enter sort mode and move the active sort column.
+- `enter` in sort mode: toggle ascending/descending order.
+- `escape` in sort mode: return to normal list controls.
 - `/`: search tasks by name, command, ID, or status.
 - `p`: cycle period filter: `session`, `24h`, `7d`, `all`.
 - `s`: cycle status filter: `all`, `active`, `completed`, `failed`, `cancelled`.
@@ -135,6 +140,7 @@ Project layout:
 - `src/task-manager.ts`: task creation, task IDs, in-memory task storage, and status updates.
 - `src/task-runner.ts`: shell process execution, output capture, result-file writing, timeouts, and cancellation.
 - `src/task-browser-modal.ts`: task browser TUI.
+- `src/task-browser-state.ts`: task browser filtering, search, and column sorting state.
 - `src/footer.ts`: footer text formatting.
 - `src/notifier.ts`: queued notification delivery.
 - `src/task-utils.ts`: task filtering and result visibility helpers.
