@@ -70,12 +70,13 @@ function getVisibleTasks(): Task[] {
 }
 
 function buildFooterText(): string | undefined {
-  const visible = getVisibleTasks();
+  const visible = getVisibleTasks()
+    .filter((t) => t.type !== "recurring"); // recurring tasks use notifications, not footer
+  
   if (visible.length === 0) return undefined;
 
   const running = visible.filter((t) => t.status === "running" || t.status === "pending" || t.status === "queued");
   const finished = visible.filter((t) => t.status === "completed" || t.status === "failed");
-  const recurring = visible.filter((t) => t.status === "recurring");
 
   const parts: string[] = [];
 
@@ -86,7 +87,6 @@ function buildFooterText(): string | undefined {
   if (moreRunning > 0) parts.push(`${moreRunning} running`);
 
   if (finished.length > 0) parts.push(`${finished.length} completed`);
-  if (recurring.length > 0) parts.push(`${recurring.length} recurring`);
 
   return `📋 ${parts.join(", ")}`;
 }
