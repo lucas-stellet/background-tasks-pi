@@ -54,7 +54,7 @@ describe("buildFooterText", () => {
     const result = buildFooterText([
       task({ type: "recurring", status: "recurring", name: "watch" }),
     ]);
-    assert.equal(result, '📋 "watch" running');
+    assert.equal(result, '📋 🔄 "watch" running');
   });
 
   it("mixes recurring and background running", () => {
@@ -62,7 +62,7 @@ describe("buildFooterText", () => {
       task({ type: "recurring", status: "recurring", name: "watch" }),
       task({ status: "running", name: "build" }),
     ]);
-    assert.equal(result, '📋 "watch" running, "build" running');
+    assert.equal(result, '📋 🔄 "watch" running, "build" running');
   });
 
   it("recurring never shows as completed", () => {
@@ -70,7 +70,7 @@ describe("buildFooterText", () => {
       task({ type: "recurring", status: "recurring", name: "watch" }),
       task({ status: "completed", name: "done" }),
     ]);
-    assert.equal(result, '📋 "watch" running, 1 completed');
+    assert.equal(result, '📋 🔄 "watch" running, 1 completed');
   });
 
   it("excludes seen tasks", () => {
@@ -86,7 +86,7 @@ describe("buildFooterText", () => {
       task({ type: "recurring", status: "recurring", name: "watch" }),
     ]);
     assert.ok(result);
-    assert.equal(result, '📋 "watch" running');
+    assert.equal(result, '📋 🔄 "watch" running');
   });
 
   it("shows only completed when no running", () => {

@@ -18,7 +18,8 @@ export function buildFooterText(tasks: Task[]): string | undefined {
   const parts: string[] = [];
 
   for (const t of running.slice(0, 2)) {
-    parts.push(`"${t.name}" running`);
+    const prefix = t.type === "recurring" ? "🔄 " : "";
+    parts.push(`${prefix}"${t.name}" running`);
   }
   const moreRunning = running.length - 2;
   if (moreRunning > 0) parts.push(`${moreRunning} running`);
