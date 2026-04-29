@@ -19,6 +19,7 @@ const LIST_VIEWPORT_HEIGHT = 8;
 const DETAIL_VIEWPORT_HEIGHT = 18;
 const OUTPUT_TAIL_LINES = 20;
 const OUTPUT_SUMMARY_PREVIEW_CHARS = 1000;
+const OUTPUT_SUMMARY_PREVIEW_LINES = 1;
 
 function pad(text: string, width: number): string {
   return text + " ".repeat(Math.max(0, width - visibleWidth(text)));
@@ -117,7 +118,7 @@ function wrapText(text: string, width: number): string[] {
 function previewOutput(output: string, width: number): { lines: string[]; truncated: boolean } {
   const clipped = output.slice(0, OUTPUT_SUMMARY_PREVIEW_CHARS);
   const wrapped = wrapText(clipped, width);
-  const lines = wrapped.slice(0, 3);
+  const lines = wrapped.slice(0, OUTPUT_SUMMARY_PREVIEW_LINES);
   return {
     lines,
     truncated: output.length > clipped.length || wrapped.length > lines.length,

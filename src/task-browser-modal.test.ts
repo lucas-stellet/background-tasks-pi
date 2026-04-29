@@ -67,11 +67,13 @@ describe("TaskBrowserModal source integration", () => {
     assert.match(source, /sortHeader/);
   });
 
-  it("bounds selected-task output preview work in the list view", async () => {
+  it("shows only one selected-task output preview line in the list view", async () => {
     const source = await readFile(new URL("./task-browser-modal.ts", import.meta.url), "utf8");
 
     assert.match(source, /OUTPUT_SUMMARY_PREVIEW_CHARS/);
+    assert.match(source, /OUTPUT_SUMMARY_PREVIEW_LINES = 1/);
     assert.match(source, /function previewOutput/);
+    assert.match(source, /const lines = wrapped\.slice\(0, OUTPUT_SUMMARY_PREVIEW_LINES\)/);
     assert.match(source, /const preview = previewOutput\(output, innerW - 10\)/);
     assert.match(source, /preview\.truncated/);
   });
