@@ -34,6 +34,25 @@ describe("TaskBrowserModal source integration", () => {
     assert.match(source, /following output/);
   });
 
+  it("refreshes detail follow state when task status changes without new output", async () => {
+    const source = await readFile(new URL("./task-browser-modal.ts", import.meta.url), "utf8");
+
+    assert.match(source, /lastDetailVersion/);
+    assert.match(source, /task\.status/);
+    assert.match(source, /task\.completedAt/);
+    assert.match(source, /task\.exitCode/);
+    assert.match(source, /task\.duration/);
+    assert.match(source, /this\.followOutput && detailVersion !== this\.lastDetailVersion/);
+  });
+
+  it("keeps detail view bound to the selected task across render refreshes", async () => {
+    const source = await readFile(new URL("./task-browser-modal.ts", import.meta.url), "utf8");
+
+    assert.match(source, /detailTaskId/);
+    assert.match(source, /this\.state\.tasks\.find\(\(task\) => task\.id === this\.detailTaskId\)/);
+    assert.match(source, /this\.refreshState\(\);\n\s+const selected = this\.selectedTask\(\)/);
+  });
+
   it("supports slash search and period/status filter hotkeys", async () => {
     const source = await readFile(new URL("./task-browser-modal.ts", import.meta.url), "utf8");
 

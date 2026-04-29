@@ -127,7 +127,9 @@ export class TaskBrowserModal implements Component {
   private scrollOffset = 0;
   private detailScrollOffset = 0;
   private followOutput = true;
+  private detailTaskId: string | undefined;
   private lastDetailOutputVersion = 0;
+  private lastDetailVersion = "";
 
   constructor(options: {
     tasks?: Task[];
@@ -179,7 +181,18 @@ export class TaskBrowserModal implements Component {
   }
 
   private selectedTask(): Task | undefined {
+    if (this.screen === "detail" && this.detailTaskId) {
+      return this.state.tasks.find((task) => task.id === this.detailTaskId) ?? this.state.visibleTasks[this.cursor];
+    }
     return this.state.visibleTasks[this.cursor];
+  }
+
+  private resetDetailState(taskId: string | undefined): void {
+    this.detailTaskId = taskId;
+    this.detailScrollOffset = 0;
+    this.followOutput = true;
+    this.lastDetailOutputVersion = -1;
+    this.lastDetailVersion = "";
   }
 
   private ensureScrollVisible(): void {
@@ -223,7 +236,7 @@ export class TaskBrowserModal implements Component {
 
     if (this.screen === "detail" && matchesKey(data, "escape")) {
       this.screen = "list";
-      this.detailScrollOffset = 0;
+      this.resetDetailState(undefined);
       this.tui.requestRender();
       return;
     }
@@ -247,6 +260,7 @@ export class TaskBrowserModal implements Component {
       } else if (matchesKey(data, "f") || matchesKey(data, "end")) {
         this.followOutput = true;
         this.lastDetailOutputVersion = -1;
+        this.lastDetailVersion = "";
       }
       this.tui.requestRender();
       return;
@@ -271,11 +285,10 @@ export class TaskBrowserModal implements Component {
     }
 
     if (matchesKey(data, "return")) {
-      if (this.selectedTask()) {
+      const task = this.selectedTask();
+      if (task) {
         this.screen = "detail";
-        this.detailScrollOffset = 0;
-        this.followOutput = true;
-        this.lastDetailOutputVersion = -1;
+        this.resetDetailState(task.id);
         this.tui.requestRender();
       }
       return;
@@ -391,12 +404,22 @@ export class TaskBrowserModal implements Component {
     if (!task.stdout && !task.stderr) body.push(row(this.theme.fg("dim", "No output captured yet."), width, this.theme));
 
     const maxOffset = Math.max(0, body.length - DETAIL_VIEWPORT_HEIGHT);
-    const outputVersion = task.outputVersion ?? 0;
-    if (this.followOutput && outputVersion !== this.lastDetailOutputVersion) {
-      this.detailScrollOffset = maxOffset;
-      this.lastDetailOutputVersion = outputVersion;
+    if (task.id !== this.detailTaskId) {
+      this.resetDetailState(task.id);
     }
-    this.detailScrollOffset = Math.min(this.detailScrollOffset, maxOffset);
+    const detailVersion = [
+      task.outputVersion ?? 0,
+      task.status,
+      task.completedAt ?? "",
+      task.exitCode ?? "",
+      task.duration ?? "",
+    ].join(":");
+    if (this.followOutput && detailVersion !== this.lastDetailVersion) {
+      this.detailScrollOffset = maxOffset;
+    }
+    this.lastDetailOutputVersion = task.outputVersion ?? 0;
+    this.lastDetailVersion = detailVersion;
+    this.detailScrollOffset = Math.max(0, Math.min(this.detailScrollOffset, maxOffset));
     const visible = body.slice(this.detailScrollOffset, this.detailScrollOffset + DETAIL_VIEWPORT_HEIGHT);
     const scrollInfo = formatScrollInfo(this.detailScrollOffset, Math.max(0, body.length - (this.detailScrollOffset + visible.length)));
 
@@ -410,9 +433,10 @@ export class TaskBrowserModal implements Component {
   }
 
   render(width: number): string[] {
+    this.refreshState();
+    const selected = this.selectedTask();
     const w = Math.min(width, this.width);
     const innerW = w - 2;
-    const selected = this.selectedTask();
     if (this.screen === "detail" && selected) return this.renderDetail(selected, w, innerW);
     return this.renderList(w, innerW);
   }
