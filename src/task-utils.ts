@@ -87,6 +87,41 @@ function formatDuration(task: Task): string {
   return "-";
 }
 
+function tailLines(text: string | undefined, count: number): string {
+  if (!text) return "";
+  return text.trimEnd().split("\n").slice(-count).join("\n");
+}
+
+function formatLiveDuration(task: Task, now: string): string {
+  if (task.duration !== undefined) return `${(task.duration / 1000).toFixed(1)}s`;
+  if (task.startedAt && (task.status === "running" || task.status === "recurring")) {
+    return `${(Math.max(0, Date.parse(now) - Date.parse(task.startedAt)) / 1000).toFixed(1)}s`;
+  }
+  return "-";
+}
+
+export function formatTaskStatusForAgent(task: Task, options: { now?: string; tailLines?: number } = {}): string {
+  const now = options.now ?? new Date().toISOString();
+  const tailCount = options.tailLines ?? 20;
+  const lines = [
+    `${task.id} | ${task.name} | ${task.status} | ${formatExit(task)} | ${formatLiveDuration(task, now)}`,
+    `command: ${task.command}`,
+    `cwd: ${task.cwd ?? process.cwd()}`,
+    `stdout: ${task.stdoutPath ?? "-"}`,
+    `stderr: ${task.stderrPath ?? "-"}`,
+    `result: ${task.resultPath ?? "-"}`,
+    `stdoutBytes: ${task.stdoutBytes ?? 0}`,
+    `stderrBytes: ${task.stderrBytes ?? 0}`,
+    `outputVersion: ${task.outputVersion ?? 0}`,
+  ];
+
+  const stdoutTail = tailLines(task.stdout, tailCount);
+  const stderrTail = tailLines(task.stderr, tailCount);
+  if (stdoutTail) lines.push("", "STDOUT tail:", stdoutTail);
+  if (stderrTail) lines.push("", "STDERR tail:", stderrTail);
+  return lines.join("\n");
+}
+
 function formatExit(task: Task): string {
   return task.exitCode === undefined ? "exit -" : `exit ${task.exitCode}`;
 }

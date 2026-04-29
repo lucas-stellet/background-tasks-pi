@@ -17,6 +17,23 @@ function task(id: string, name: string, status: Task["status"], createdAt: strin
 }
 
 describe("TaskBrowserModal source integration", () => {
+  it("reads tasks from getTasks on each render", async () => {
+    const source = await readFile(new URL("./task-browser-modal.ts", import.meta.url), "utf8");
+
+    assert.match(source, /getTasks: \(\) => Task\[\]/);
+    assert.match(source, /this\.getTasks\(\)/);
+  });
+
+  it("supports follow-output controls for live task details", async () => {
+    const source = await readFile(new URL("./task-browser-modal.ts", import.meta.url), "utf8");
+
+    assert.match(source, /followOutput = true/);
+    assert.match(source, /lastDetailOutputVersion/);
+    assert.match(source, /matchesKey\(data, "f"\)/);
+    assert.match(source, /scroll paused/);
+    assert.match(source, /following output/);
+  });
+
   it("supports slash search and period/status filter hotkeys", async () => {
     const source = await readFile(new URL("./task-browser-modal.ts", import.meta.url), "utf8");
 

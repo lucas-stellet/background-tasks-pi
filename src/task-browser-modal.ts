@@ -113,7 +113,7 @@ function wrapText(text: string, width: number): string[] {
 
 export class TaskBrowserModal implements Component {
   private readonly width = OVERLAY_WIDTH;
-  private readonly tasks: Task[];
+  private readonly getTasks: () => Task[];
   private readonly tui: TUI;
   private readonly theme: Theme;
   private readonly onClose: () => void;
@@ -126,9 +126,12 @@ export class TaskBrowserModal implements Component {
   private cursor = 0;
   private scrollOffset = 0;
   private detailScrollOffset = 0;
+  private followOutput = true;
+  private lastDetailOutputVersion = 0;
 
   constructor(options: {
-    tasks: Task[];
+    tasks?: Task[];
+    getTasks?: () => Task[];
     preferences: TaskBrowserPreferences;
     sessionStartedAt: string;
     selectedIndex?: number;
@@ -139,10 +142,10 @@ export class TaskBrowserModal implements Component {
     onCancel: (taskId: string) => void;
     onPreferencesChange: (preferences: TaskBrowserPreferences) => void;
   }) {
-    this.tasks = options.tasks;
+    this.getTasks = options.getTasks ?? (() => options.tasks ?? []);
     this.now = options.now ?? (() => new Date().toISOString());
     this.state = createTaskBrowserState({
-      tasks: this.tasks,
+      tasks: this.getTasks(),
       preferences: options.preferences,
       sessionStartedAt: options.sessionStartedAt,
       now: this.now(),
@@ -158,7 +161,7 @@ export class TaskBrowserModal implements Component {
 
   private refreshState(): void {
     this.state = createTaskBrowserState({
-      tasks: this.tasks,
+      tasks: this.getTasks(),
       preferences: this.state.preferences,
       sessionStartedAt: this.state.sessionStartedAt,
       now: this.now(),
@@ -231,10 +234,20 @@ export class TaskBrowserModal implements Component {
     }
 
     if (this.screen === "detail") {
-      if (matchesKey(data, "up")) this.detailScrollOffset = Math.max(0, this.detailScrollOffset - 1);
-      else if (matchesKey(data, "down")) this.detailScrollOffset++;
-      else if (matchesKey(data, "pageup")) this.detailScrollOffset = Math.max(0, this.detailScrollOffset - DETAIL_VIEWPORT_HEIGHT);
-      else if (matchesKey(data, "pagedown")) this.detailScrollOffset += DETAIL_VIEWPORT_HEIGHT;
+      if (matchesKey(data, "up")) {
+        this.followOutput = false;
+        this.detailScrollOffset = Math.max(0, this.detailScrollOffset - 1);
+      } else if (matchesKey(data, "down")) {
+        this.detailScrollOffset++;
+      } else if (matchesKey(data, "pageup")) {
+        this.followOutput = false;
+        this.detailScrollOffset = Math.max(0, this.detailScrollOffset - DETAIL_VIEWPORT_HEIGHT);
+      } else if (matchesKey(data, "pagedown")) {
+        this.detailScrollOffset += DETAIL_VIEWPORT_HEIGHT;
+      } else if (matchesKey(data, "f") || matchesKey(data, "end")) {
+        this.followOutput = true;
+        this.lastDetailOutputVersion = -1;
+      }
       this.tui.requestRender();
       return;
     }
@@ -261,6 +274,8 @@ export class TaskBrowserModal implements Component {
       if (this.selectedTask()) {
         this.screen = "detail";
         this.detailScrollOffset = 0;
+        this.followOutput = true;
+        this.lastDetailOutputVersion = -1;
         this.tui.requestRender();
       }
       return;
@@ -376,6 +391,11 @@ export class TaskBrowserModal implements Component {
     if (!task.stdout && !task.stderr) body.push(row(this.theme.fg("dim", "No output captured yet."), width, this.theme));
 
     const maxOffset = Math.max(0, body.length - DETAIL_VIEWPORT_HEIGHT);
+    const outputVersion = task.outputVersion ?? 0;
+    if (this.followOutput && outputVersion !== this.lastDetailOutputVersion) {
+      this.detailScrollOffset = maxOffset;
+      this.lastDetailOutputVersion = outputVersion;
+    }
     this.detailScrollOffset = Math.min(this.detailScrollOffset, maxOffset);
     const visible = body.slice(this.detailScrollOffset, this.detailScrollOffset + DETAIL_VIEWPORT_HEIGHT);
     const scrollInfo = formatScrollInfo(this.detailScrollOffset, Math.max(0, body.length - (this.detailScrollOffset + visible.length)));
@@ -384,8 +404,8 @@ export class TaskBrowserModal implements Component {
       renderHeader(` Task ${task.id.slice(0, 8)} `, width, this.theme),
       ...visible,
       ...Array(Math.max(0, DETAIL_VIEWPORT_HEIGHT - visible.length)).fill(row("", width, this.theme)),
-      row(scrollInfo ? this.theme.fg("dim", scrollInfo) : "", width, this.theme),
-      renderFooter(" ↑↓ scroll  esc summary  q close ", width, this.theme),
+      row(scrollInfo ? this.theme.fg("dim", scrollInfo) : this.theme.fg("dim", this.followOutput ? "following output — ↑/pageup pauses" : "scroll paused — f/end to follow"), width, this.theme),
+      renderFooter(" ↑↓ scroll  f/end follow  esc summary  q close ", width, this.theme),
     ];
   }
 

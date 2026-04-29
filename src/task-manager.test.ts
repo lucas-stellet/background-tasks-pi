@@ -5,6 +5,22 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createTaskManager } from "./task-manager.ts";
 
+describe("TaskManager - subscriptions", () => {
+  it("notifies subscribers about task changes and stops after unsubscribe", () => {
+    const manager = createTaskManager({});
+    const task = manager.createBackground({ name: "live", command: "echo ok" });
+    const seen: string[] = [];
+
+    const unsubscribe = manager.subscribe((changedTask) => seen.push(changedTask.id));
+
+    manager.notifyTaskChanged(task);
+    unsubscribe();
+    manager.notifyTaskChanged(task);
+
+    assert.deepEqual(seen, [task.id]);
+  });
+});
+
 describe("TaskManager - recurring tasks", () => {
   it("creates a recurring task with interval", () => {
     const manager = createTaskManager({});

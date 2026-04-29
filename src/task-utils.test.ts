@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { applyTaskBrowserFilters, filterTasks, formatTaskListForAgent, markFinishedTasksSeen, markTerminalTaskSeen } from "./task-utils.ts";
+import { applyTaskBrowserFilters, filterTasks, formatTaskListForAgent, formatTaskStatusForAgent, markFinishedTasksSeen, markTerminalTaskSeen } from "./task-utils.ts";
 import type { Task } from "./task-manager.ts";
 
 function task(status: Task["status"], resultSeen = false): Task {
@@ -72,6 +72,24 @@ describe("extension commands", () => {
     assert.match(source, /saveTaskBrowserConfig/);
     assert.match(source, /preferences: config\.taskBrowser/);
     assert.match(source, /onPreferencesChange/);
+  });
+
+  it("registers an agent tool for live background task status", async () => {
+    const source = await readFile(new URL("../index.ts", import.meta.url), "utf8");
+
+    assert.match(source, /get-background-task-status/);
+    assert.match(source, /formatTaskStatusForAgent/);
+    assert.match(source, /active\/running task progress/);
+  });
+
+  it("wires task browser live subscriptions with throttled renders and cleanup", async () => {
+    const source = await readFile(new URL("../index.ts", import.meta.url), "utf8");
+
+    assert.match(source, /manager\.subscribe/);
+    assert.match(source, /scheduleTaskBrowserRender/);
+    assert.match(source, /clearInterval\(heartbeatId\)/);
+    assert.match(source, /unsubscribe\(\)/);
+    assert.match(source, /getTasks: \(\) => manager\.getTasks\(\)/);
   });
 
   it("passes session start time to the task browser modal", async () => {
@@ -153,6 +171,36 @@ describe("task utils", () => {
     });
 
     assert.deepEqual(filtered.map((t) => t.id), ["task-precommit"]);
+  });
+
+  it("formats live task status with output tails for agent tool results", () => {
+    const output = formatTaskStatusForAgent({
+      id: "task-live",
+      type: "background",
+      status: "running",
+      name: "precommit",
+      command: "npm test",
+      createdAt: "2026-04-29T00:00:00.000Z",
+      startedAt: "2026-04-29T00:00:01.000Z",
+      resultSeen: false,
+      stdout: "line 1\nline 2\nline 3",
+      stderr: "warn 1\nwarn 2",
+      stdoutBytes: 20,
+      stderrBytes: 12,
+      outputVersion: 4,
+      stdoutPath: "/tmp/stdout.txt",
+      stderrPath: "/tmp/stderr.txt",
+      resultPath: "/tmp/result.md",
+    }, { now: "2026-04-29T00:00:06.000Z", tailLines: 2 });
+
+    assert.match(output, /task-live \| precommit \| running \| exit - \| 5\.0s/);
+    assert.match(output, /stdoutBytes: 20/);
+    assert.match(output, /stderrBytes: 12/);
+    assert.match(output, /outputVersion: 4/);
+    assert.match(output, /stdout: \/tmp\/stdout\.txt/);
+    assert.match(output, /line 2\nline 3/);
+    assert.doesNotMatch(output, /line 1/);
+    assert.match(output, /warn 1\nwarn 2/);
   });
 
   it("formats a textual task list for agent tool results", () => {

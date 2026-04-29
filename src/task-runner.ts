@@ -9,6 +9,7 @@ export interface TaskRunnerCallbacks {
   onTaskComplete: (task: Task) => void;
   onTaskError: (task: Task, error: string) => void;
   onRecurringCycle: (task: Task) => void;
+  onTaskOutput?: (task: Task, stream: "stdout" | "stderr") => void;
 }
 
 const MAX_OUTPUT_PREVIEW_BYTES = 64 * 1024;
@@ -75,6 +76,12 @@ export function createTaskRunner(callbacks: TaskRunnerCallbacks) {
 
     task.status = "running";
     task.startedAt = new Date().toISOString();
+    task.stdout = "";
+    task.stderr = "";
+    task.stdoutBytes = 0;
+    task.stderrBytes = 0;
+    task.outputVersion = 0;
+    task.updatedAt = task.startedAt;
     callbacks.onTaskStart(task);
     await writeFile(task.stdoutPath!, "");
     await writeFile(task.stderrPath!, "");
@@ -103,11 +110,23 @@ export function createTaskRunner(callbacks: TaskRunnerCallbacks) {
 
     child.stdout?.on("data", (data: Buffer) => {
       stdout = appendPreview(stdout, data.toString());
+      task.stdout = stdout;
+      task.stdoutBytes = (task.stdoutBytes ?? 0) + data.length;
+      task.outputVersion = (task.outputVersion ?? 0) + 1;
+      task.updatedAt = new Date().toISOString();
+      task.lastOutputAt = task.updatedAt;
       stdoutStream.write(data);
+      callbacks.onTaskOutput?.(task, "stdout");
     });
     child.stderr?.on("data", (data: Buffer) => {
       stderr = appendPreview(stderr, data.toString());
+      task.stderr = stderr;
+      task.stderrBytes = (task.stderrBytes ?? 0) + data.length;
+      task.outputVersion = (task.outputVersion ?? 0) + 1;
+      task.updatedAt = new Date().toISOString();
+      task.lastOutputAt = task.updatedAt;
       stderrStream.write(data);
+      callbacks.onTaskOutput?.(task, "stderr");
     });
 
     child.on("close", async (code: number | null) => {

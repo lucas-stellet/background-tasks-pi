@@ -11,6 +11,7 @@ It adds tools for one-off and recurring tasks, shows task state in the pi footer
 - `run-background-task`: run a shell command once from the project cwd and return immediately with a task ID.
 - `run-recurring-task`: run a command from the project cwd every N seconds until cancelled.
 - `list-background-tasks`: return a textual task list for agents, optionally filtered by status.
+- `get-background-task-status`: return live status, duration, byte counts, and recent stdout/stderr tails for running or finished tasks.
 - `get-background-task-result`: return captured output for one task as text.
 - `cancel-background-task`: stop a pending, running, queued, or recurring task.
 
@@ -24,7 +25,7 @@ It adds tools for one-off and recurring tasks, shows task state in the pi footer
 - The footer shows active recurring tasks, running tasks, and finished tasks with unseen results.
 - Finished task notifications are queued while the agent is busy and delivered when it becomes idle.
 - Agent tools return text only; the interactive task browser is available through `/tasks`.
-- The task browser lets you inspect status, command output, duration, IDs, and task details.
+- The task browser updates live while open and lets you inspect status, command output, duration, IDs, and task details.
 - Task results are saved under `.background-tasks/<task-id>/` in the project directory and reloaded on startup.
 
 ## Install
@@ -79,6 +80,14 @@ Use list-background-tasks with:
 filter: active
 ```
 
+Inspect live progress from the agent while a task is still running:
+
+```text
+Use get-background-task-status with:
+taskId: task_...
+tailLines: 20
+```
+
 Cancel a task:
 
 ```text
@@ -96,7 +105,8 @@ The task browser defaults to the current session so old task history does not ov
 - `s`: cycle status filter: `all`, `active`, `completed`, `failed`, `cancelled`.
 - `enter`: open the selected task detail view, or leave search mode.
 - `home` / `end`: jump to the first or last task.
-- `pageup` / `pagedown`: scroll details faster.
+- `pageup` / `pagedown`: scroll details faster; scrolling upward pauses output follow mode.
+- `f` or `end` in detail view: resume following live output and jump to the newest tail.
 - `x` or `d`: cancel the selected active task.
 - `escape`: clear/exit search, close the browser, or return from detail view to the list.
 - `q`: close the browser.
@@ -122,6 +132,8 @@ Project layout:
 ## Notes
 
 Background tasks run through `/bin/sh -c` from the project cwd. Review commands before running them. Local pi packages and extensions execute with your normal system permissions.
+
+While a task is running, recent stdout/stderr are also kept in a bounded in-memory live buffer for fast status checks and `/tasks` refreshes. Full output remains on disk.
 
 Each task writes files to `.background-tasks/<task-id>/`:
 

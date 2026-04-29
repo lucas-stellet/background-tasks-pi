@@ -5,6 +5,7 @@
  *   run-background-task  — run a command once from the project cwd, returns immediately
  *   run-recurring-task   — run a command from the project cwd every N seconds until cancelled
  *   list-background-tasks — returns a textual task list for agents
+ *   get-background-task-status — returns live task status and recent output for agents
  *   get-background-task-result — returns task output for agents
  *   cancel-background-task — cancel running/pending/recurring task
  *
@@ -15,8 +16,9 @@
  * Modal Navigation:
  *   ↑↓ — navigate between tasks or scroll detail
  *   Enter — open selected task detail
- *   Home/End — jump to first/last task
+ *   Home/End — jump to first/last task; End follows output in detail view
  *   x or d — cancel selected running task
+ *   f — follow output in detail view
  *   q/Esc — close modal
  *
  * Footer: shows up to 2 running tasks by name, + counts for rest
@@ -31,7 +33,7 @@ import { buildFooterText } from "./src/footer.ts";
 import { createNotificationQueue, type Notifier } from "./src/notifier.ts";
 import { TaskBrowserModal } from "./src/task-browser-modal.ts";
 import { loadTaskBrowserConfig, saveTaskBrowserConfig } from "./src/task-browser-config.ts";
-import { filterTasks, formatTaskListForAgent } from "./src/task-utils.ts";
+import { filterTasks, formatTaskListForAgent, formatTaskStatusForAgent } from "./src/task-utils.ts";
 
 // ── State ────────────────────────────────────────────────────────────
 let pi: ExtensionAPI | null = null;
@@ -59,16 +61,25 @@ const queue = createNotificationQueue(notifier);
 
 const manager = createTaskManager({ maxConcurrent: 5 });
 const runner = createTaskRunner({
-  onTaskStart() { updateFooter(); },
+  onTaskStart(task) {
+    manager.notifyTaskChanged(task);
+    updateFooter();
+  },
+  onTaskOutput(task) {
+    manager.notifyTaskChanged(task);
+  },
   onTaskComplete(task) {
+    manager.notifyTaskChanged(task);
     updateFooter();
     queue.notify(getSummary(task), "completed");
   },
   onTaskError(task, error) {
+    manager.notifyTaskChanged(task);
     updateFooter();
     queue.notify(`${task.name}: ${error}`, "failed");
   },
   onRecurringCycle(task) {
+    manager.notifyTaskChanged(task);
     updateFooter();
     queue.notify(`${task.name}: ${task.stdout?.trim() || "(no output)"}`, "recurring");
   },
@@ -198,6 +209,42 @@ const listBackgroundTasksTool = defineTool({
   },
 });
 
+const getBackgroundTaskStatusTool = defineTool({
+  name: "get-background-task-status",
+  label: "Get Task Status",
+  description: "Get live status and recent output for background tasks, including active/running task progress.",
+  promptSnippet: "Inspect active/running task progress and recent stdout/stderr without waiting for completion",
+  promptGuidelines: [
+    "Use get-background-task-status when the user asks for active/running task progress or wants to inspect a background task before it finishes.",
+    "Use get-background-task-status with taskId to get live stdout/stderr tails for a specific task.",
+    "Use get-background-task-status without taskId to summarize matching background tasks.",
+  ],
+  parameters: Type.Object({
+    taskId: Type.Optional(Type.String({ description: "Specific task ID to inspect" })),
+    filter: Type.Optional(StringEnum(["all", "active", "completed", "failed"] as const)),
+    tailLines: Type.Optional(Type.Number({ description: "Number of stdout/stderr tail lines to include (default: 20)" })),
+  }),
+
+  async execute(_id, params) {
+    if (params.taskId) {
+      const task = manager.getTask(params.taskId);
+      if (!task) return { content: [{ type: "text", text: `Task not found: ${params.taskId}` }], details: { error: "not found" } };
+      return {
+        content: [{ type: "text", text: formatTaskStatusForAgent(task, { tailLines: params.tailLines }) }],
+        details: task,
+      };
+    }
+
+    const taskList = filterTasks(manager.getTasks(), params.filter ?? "active");
+    if (taskList.length === 0) return { content: [{ type: "text", text: "No background tasks found." }], details: { count: 0, tasks: [] } };
+
+    return {
+      content: [{ type: "text", text: taskList.map((task) => formatTaskStatusForAgent(task, { tailLines: params.tailLines ?? 5 })).join("\n\n---\n\n") }],
+      details: { count: taskList.length, tasks: taskList },
+    };
+  },
+});
+
 const getBackgroundTaskResultTool = defineTool({
   name: "get-background-task-result",
   label: "Get Task Result",
@@ -257,6 +304,7 @@ export default function (piArg: ExtensionAPI) {
   pi.registerTool(runBackgroundTaskTool);
   pi.registerTool(runRecurringTaskTool);
   pi.registerTool(listBackgroundTasksTool);
+  pi.registerTool(getBackgroundTaskStatusTool);
   pi.registerTool(getBackgroundTaskResultTool);
   pi.registerTool(cancelBackgroundTaskTool);
 
@@ -284,13 +332,32 @@ export default function (piArg: ExtensionAPI) {
             }
           };
 
+          let renderTimer: ReturnType<typeof setTimeout> | undefined;
+          const scheduleTaskBrowserRender = () => {
+            if (renderTimer) return;
+            renderTimer = setTimeout(() => {
+              renderTimer = undefined;
+              tui.requestRender();
+            }, 250);
+          };
+          const unsubscribe = manager.subscribe(() => scheduleTaskBrowserRender());
+          const heartbeatId = setInterval(() => tui.requestRender(), 1000);
+          const cleanup = () => {
+            if (renderTimer) clearTimeout(renderTimer);
+            clearInterval(heartbeatId);
+            unsubscribe();
+          };
+
           const modal = new TaskBrowserModal({
-            tasks: list,
+            getTasks: () => manager.getTasks(),
             preferences: config.taskBrowser,
             sessionStartedAt: manager.getSessionStartedAt(),
             tui,
             theme,
-            onClose: () => done(undefined),
+            onClose: () => {
+              cleanup();
+              done(undefined);
+            },
             onCancel: handleCancel,
             onPreferencesChange: (preferences) => saveTaskBrowserConfig(manager.getCwd(), preferences),
           });

@@ -5,7 +5,132 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { createTaskRunner } from "./task-runner.ts";
 
+async function waitUntil(predicate: () => boolean, timeoutMs = 1000): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (predicate()) return true;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  return predicate();
+}
+
 describe("TaskRunner", () => {
+  it("updates stdout preview before task completes", async () => {
+    const runner = createTaskRunner({
+      onTaskStart: () => {},
+      onTaskComplete: () => {},
+      onTaskError: () => {},
+      onRecurringCycle: () => {},
+    });
+
+    const task = {
+      id: "live-1",
+      type: "background" as const,
+      status: "pending" as const,
+      name: "live",
+      command: "printf first; sleep 0.4; printf second",
+      timeout: 5,
+      createdAt: new Date().toISOString(),
+      resultSeen: false,
+    };
+
+    runner.run(task);
+
+    const sawLiveOutput = await waitUntil(() => task.status === "running" && task.stdout === "first");
+
+    assert.equal(sawLiveOutput, true);
+    assert.equal(task.status, "running");
+    assert.equal(task.stdoutBytes, 5);
+    assert.equal(task.outputVersion, 1);
+  });
+
+  it("keeps live stdout preview bounded while tracking full byte count", async () => {
+    let completedTask: any = null;
+    const runner = createTaskRunner({
+      onTaskStart: () => {},
+      onTaskComplete: (task) => { completedTask = task; },
+      onTaskError: () => {},
+      onRecurringCycle: () => {},
+    });
+
+    const task = {
+      id: "live-2",
+      type: "background" as const,
+      status: "pending" as const,
+      name: "bounded",
+      command: "python3 - <<'PY'\nprint('a' * 70000, end='')\nPY",
+      timeout: 5,
+      createdAt: new Date().toISOString(),
+      resultSeen: false,
+    };
+
+    await runner.run(task);
+    await waitUntil(() => completedTask !== null, 1500);
+
+    assert.ok(completedTask);
+    assert.equal(completedTask.stdoutBytes, 70000);
+    assert.ok(Buffer.byteLength(completedTask.stdout) <= 64 * 1024);
+  });
+
+  it("clears previous live output when a task starts another run", async () => {
+    const runner = createTaskRunner({
+      onTaskStart: () => {},
+      onTaskComplete: () => {},
+      onTaskError: () => {},
+      onRecurringCycle: () => {},
+    });
+
+    const task = {
+      id: "live-rerun",
+      type: "recurring" as const,
+      status: "recurring" as const,
+      name: "rerun",
+      command: "echo first",
+      timeout: 5,
+      createdAt: new Date().toISOString(),
+      resultSeen: false,
+    };
+
+    await runner.run(task);
+    await waitUntil(() => task.status === "recurring" && task.stdout?.includes("first"));
+
+    task.command = "sleep 0.2; echo second";
+    runner.run(task);
+    await waitUntil(() => task.status === "running");
+
+    assert.equal(task.stdout, "");
+    assert.equal(task.stderr, "");
+    assert.equal(task.stdoutBytes, 0);
+    assert.equal(task.stderrBytes, 0);
+  });
+
+  it("calls onTaskOutput for stdout and stderr chunks", async () => {
+    const streams: string[] = [];
+    const runner = createTaskRunner({
+      onTaskStart: () => {},
+      onTaskComplete: () => {},
+      onTaskError: () => {},
+      onRecurringCycle: () => {},
+      onTaskOutput: (_task, stream) => { streams.push(stream); },
+    });
+
+    const task = {
+      id: "live-3",
+      type: "background" as const,
+      status: "pending" as const,
+      name: "callbacks",
+      command: "echo out; echo err >&2",
+      timeout: 5,
+      createdAt: new Date().toISOString(),
+      resultSeen: false,
+    };
+
+    await runner.run(task);
+    await waitUntil(() => streams.includes("stdout") && streams.includes("stderr"));
+
+    assert.deepEqual([...new Set(streams)].sort(), ["stderr", "stdout"]);
+  });
+
   it("runs a command and writes result files under the project cwd", async () => {
     let completedTask: any = null;
     const cwd = await mkdtemp(join(tmpdir(), "background-tasks-pi-"));

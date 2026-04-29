@@ -21,6 +21,11 @@ export interface Task extends TaskConfig {
   exitCode?: number;
   stdout?: string;
   stderr?: string;
+  stdoutBytes?: number;
+  stderrBytes?: number;
+  outputVersion?: number;
+  updatedAt?: string;
+  lastOutputAt?: string;
   duration?: number;
   error?: string;
   resultSeen: boolean;
@@ -53,6 +58,7 @@ export function createTaskManager(options: TaskManagerOptions) {
   const cwd = options.cwd ?? process.cwd();
   const sessionStartedAt = new Date().toISOString();
   const tasks = new Map<string, Task>();
+  const subscribers = new Set<(task: Task) => void>();
 
   function resultPaths(id: string) {
     const resultDir = joinPath(cwd, ".background-tasks", id);
@@ -121,6 +127,15 @@ export function createTaskManager(options: TaskManagerOptions) {
   }
 
   return {
+    subscribe(listener: (task: Task) => void): () => void {
+      subscribers.add(listener);
+      return () => subscribers.delete(listener);
+    },
+
+    notifyTaskChanged(task: Task): void {
+      for (const listener of subscribers) listener(task);
+    },
+
     createBackground(config: { name: string; command: string; timeout?: number; delay?: number }): Task {
       const id = generateId();
       const task: Task = {
