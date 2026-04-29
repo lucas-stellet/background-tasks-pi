@@ -18,6 +18,7 @@ const OVERLAY_WIDTH = 84;
 const LIST_VIEWPORT_HEIGHT = 8;
 const DETAIL_VIEWPORT_HEIGHT = 18;
 const OUTPUT_TAIL_LINES = 20;
+const OUTPUT_SUMMARY_PREVIEW_CHARS = 1000;
 
 function pad(text: string, width: number): string {
   return text + " ".repeat(Math.max(0, width - visibleWidth(text)));
@@ -111,6 +112,16 @@ function wrapText(text: string, width: number): string[] {
     lines.push(line);
   }
   return lines;
+}
+
+function previewOutput(output: string, width: number): { lines: string[]; truncated: boolean } {
+  const clipped = output.slice(0, OUTPUT_SUMMARY_PREVIEW_CHARS);
+  const wrapped = wrapText(clipped, width);
+  const lines = wrapped.slice(0, 3);
+  return {
+    lines,
+    truncated: output.length > clipped.length || wrapped.length > lines.length,
+  };
 }
 
 export class TaskBrowserModal implements Component {
@@ -376,11 +387,11 @@ export class TaskBrowserModal implements Component {
 
     const output = (task.stdout || task.stderr || "").trim();
     if (output) {
-      const preview = wrapText(output, innerW - 10).slice(0, 3);
+      const preview = previewOutput(output, innerW - 10);
       lines.push(row("", width, this.theme));
       lines.push(row(this.theme.fg("accent", task.stderr && !task.stdout ? "stderr" : "stdout"), width, this.theme));
-      for (const line of preview) lines.push(row(`  ${line}`, width, this.theme));
-      if (wrapText(output, innerW - 10).length > preview.length) lines.push(row(this.theme.fg("dim", "  … enter for full output"), width, this.theme));
+      for (const line of preview.lines) lines.push(row(`  ${line}`, width, this.theme));
+      if (preview.truncated) lines.push(row(this.theme.fg("dim", "  … enter for full output"), width, this.theme));
     } else {
       lines.push(row("", width, this.theme));
       lines.push(row(this.theme.fg("dim", "No output captured yet."), width, this.theme));
