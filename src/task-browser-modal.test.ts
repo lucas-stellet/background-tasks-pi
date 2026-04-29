@@ -53,6 +53,20 @@ describe("TaskBrowserModal source integration", () => {
     assert.match(source, /this\.refreshState\(\);\n\s+const selected = this\.selectedTask\(\)/);
   });
 
+  it("supports column sort mode in the task list", async () => {
+    const source = await readFile(new URL("./task-browser-modal.ts", import.meta.url), "utf8");
+
+    assert.match(source, /sortMode/);
+    assert.match(source, /moveTaskBrowserSortColumn/);
+    assert.match(source, /setTaskBrowserSortDirection/);
+    assert.match(source, /matchesKey\(data, "left"\)/);
+    assert.match(source, /matchesKey\(data, "right"\)/);
+    assert.match(source, /this\.sortMode && matchesKey\(data, "return"\)/);
+    assert.match(source, /this\.sortMode && matchesKey\(data, "escape"\)/);
+    assert.match(source, /←→ column  enter asc\/desc  esc done/);
+    assert.match(source, /sortHeader/);
+  });
+
   it("supports slash search and period/status filter hotkeys", async () => {
     const source = await readFile(new URL("./task-browser-modal.ts", import.meta.url), "utf8");
 

@@ -5,8 +5,10 @@ import type { Task } from "./task-manager.ts";
 import {
   createTaskBrowserState,
   handleTaskBrowserSearchInput,
+  moveTaskBrowserSortColumn,
   setTaskBrowserPeriod,
   setTaskBrowserQuery,
+  setTaskBrowserSortDirection,
   setTaskBrowserStatus,
   type TaskBrowserState,
 } from "./task-browser-state.ts";
@@ -122,6 +124,7 @@ export class TaskBrowserModal implements Component {
   private readonly now: () => string;
   private state: TaskBrowserState;
   private searchMode = false;
+  private sortMode = false;
   private screen: "list" | "detail" = "list";
   private cursor = 0;
   private scrollOffset = 0;
@@ -167,6 +170,7 @@ export class TaskBrowserModal implements Component {
       preferences: this.state.preferences,
       sessionStartedAt: this.state.sessionStartedAt,
       now: this.now(),
+      sort: this.state.sort,
     });
     this.cursor = Math.min(this.cursor, Math.max(0, this.state.visibleTasks.length - 1));
     this.ensureScrollVisible();
@@ -177,6 +181,15 @@ export class TaskBrowserModal implements Component {
     this.cursor = 0;
     this.scrollOffset = 0;
     this.onPreferencesChange(this.state.preferences);
+    this.ensureScrollVisible();
+  }
+
+  private updateSortState(next: TaskBrowserState): void {
+    const selectedId = this.selectedTask()?.id;
+    this.state = next;
+    const nextIndex = selectedId ? this.state.visibleTasks.findIndex((task) => task.id === selectedId) : -1;
+    if (nextIndex >= 0) this.cursor = nextIndex;
+    else this.cursor = Math.min(this.cursor, Math.max(0, this.state.visibleTasks.length - 1));
     this.ensureScrollVisible();
   }
 
@@ -241,6 +254,12 @@ export class TaskBrowserModal implements Component {
       return;
     }
 
+    if (this.sortMode && matchesKey(data, "escape")) {
+      this.sortMode = false;
+      this.tui.requestRender();
+      return;
+    }
+
     if (matchesKey(data, "escape") || matchesKey(data, "q") || matchesKey(data, "ctrl+c")) {
       this.onClose();
       return;
@@ -262,6 +281,26 @@ export class TaskBrowserModal implements Component {
         this.lastDetailOutputVersion = -1;
         this.lastDetailVersion = "";
       }
+      this.tui.requestRender();
+      return;
+    }
+
+    if (this.sortMode && matchesKey(data, "return")) {
+      this.updateSortState(setTaskBrowserSortDirection(this.state));
+      this.tui.requestRender();
+      return;
+    }
+
+    if (matchesKey(data, "left")) {
+      this.sortMode = true;
+      this.updateSortState(moveTaskBrowserSortColumn(this.state, -1));
+      this.tui.requestRender();
+      return;
+    }
+
+    if (matchesKey(data, "right")) {
+      this.sortMode = true;
+      this.updateSortState(moveTaskBrowserSortColumn(this.state, 1));
       this.tui.requestRender();
       return;
     }
@@ -349,6 +388,12 @@ export class TaskBrowserModal implements Component {
     return lines;
   }
 
+  private sortHeader(label: "name" | "status" | "time" | "id"): string {
+    const marker = this.state.sort.column === label ? (this.state.sort.direction === "asc" ? "↑" : "↓") : "";
+    const text = `${label}${marker}`;
+    return this.state.sort.column === label ? this.theme.fg("accent", text) : this.theme.fg("dim", text);
+  }
+
   private renderList(width: number, innerW: number): string[] {
     this.refreshState();
     const lines: string[] = [renderHeader(" Background Tasks ", width, this.theme)];
@@ -363,7 +408,7 @@ export class TaskBrowserModal implements Component {
       lines.push(row(this.theme.fg("dim", " No background tasks match the current filters."), width, this.theme));
       for (let i = 1; i < LIST_VIEWPORT_HEIGHT; i++) lines.push(row("", width, this.theme));
     } else {
-      lines.push(row(this.theme.fg("dim", "   name                     status       time     id"), width, this.theme));
+      lines.push(row(`   ${pad(this.sortHeader("name"), 24)} ${pad(this.sortHeader("status"), 12)} ${pad(this.sortHeader("time"), 8)} ${this.sortHeader("id")}`, width, this.theme));
       for (let i = 0; i < LIST_VIEWPORT_HEIGHT; i++) {
         const task = visible[i];
         if (!task) {
@@ -381,7 +426,7 @@ export class TaskBrowserModal implements Component {
     if (selected) lines.push(...this.renderSummary(selected, width, innerW));
     else lines.push(row(this.theme.fg("dim", "No task selected."), width, this.theme));
 
-    lines.push(renderFooter(" ↑↓ select  / search  p period  s status  enter detail  x cancel  q/esc close ", width, this.theme));
+    lines.push(renderFooter(this.sortMode ? " ←→ column  enter asc/desc  esc done " : " ↑↓ select  ←→ sort  / search  p period  s status  enter detail  x cancel  q/esc close ", width, this.theme));
     return lines;
   }
 
