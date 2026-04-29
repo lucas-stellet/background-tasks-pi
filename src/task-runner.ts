@@ -18,6 +18,9 @@ export function createTaskRunner(callbacks: TaskRunnerCallbacks) {
       await mkdir(task.isolatedDir, { recursive: true });
     }
 
+    // Don't start if already cancelled
+    if (task.status === "cancelled") return;
+
     task.status = "running";
     task.startedAt = new Date().toISOString();
     callbacks.onTaskStart(task);
@@ -49,6 +52,8 @@ export function createTaskRunner(callbacks: TaskRunnerCallbacks) {
       childProcesses.delete(task.id);
 
       if (task.type === "recurring") {
+        // Don't reset if cancelled while running
+        if (task.status === "cancelled") return;
         // Recurring tasks reset status and update output for inspection
         task.status = "recurring";
         task.exitCode = code ?? undefined;

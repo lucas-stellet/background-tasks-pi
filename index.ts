@@ -21,34 +21,51 @@ import { StringEnum, Type } from "@mariozechner/pi-ai";
 import { defineTool, type ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { createTaskManager, type Task } from "./src/task-manager.ts";
 import { createTaskRunner } from "./src/task-runner.ts";
+import { buildFooterText } from "./src/footer.ts";
+import { createNotificationQueue, type Notifier } from "./src/notifier.ts";
 
 // ── State ────────────────────────────────────────────────────────────
 let pi: ExtensionAPI | null = null;
-let isAgentIdle = true;
 let currentCtx: { ui: { setStatus: (id: string, text: string | undefined) => void } } | null = null;
-let pendingNotifications: Array<{ summary: string; status: string }> = [];
+let idle = true;
+
+const notifier: Notifier = {
+  isIdle: () => idle,
+  sendMessage: (content) => {
+    pi?.sendMessage({
+      customType: "background-task",
+      content,
+      display: true,
+      details: {},
+    }, { deliverAs: "steer", triggerTurn: true });
+  },
+};
+
+const queue = createNotificationQueue(notifier);
 
 const manager = createTaskManager({ maxConcurrent: 5 });
 const runner = createTaskRunner({
-  onTaskStart(task) {
-    updateFooter();
-  },
+  onTaskStart() { updateFooter(); },
   onTaskComplete(task) {
     updateFooter();
-    notifyAgent(getSummary(task), "completed");
+    queue.notify(getSummary(task), "completed");
   },
   onTaskError(task, error) {
     updateFooter();
-    notifyAgent(`${task.name}: ${error}`, "failed");
+    queue.notify(`${task.name}: ${error}`, "failed");
   },
   onRecurringCycle(task) {
     updateFooter();
-    const output = task.stdout?.trim() || "(no output)";
-    notifyAgent(`${task.name}: ${output}`, "recurring");
+    queue.notify(`${task.name}: ${task.stdout?.trim() || "(no output)"}`, "recurring");
   },
 });
 
 // ── Helpers ───────────────────────────────────────────────────────────
+function updateFooter(): void {
+  if (!currentCtx) return;
+  currentCtx.ui.setStatus("background-tasks", buildFooterText(manager.getTasks()));
+}
+
 function getSummary(task: Task): string {
   const emoji = task.status === "completed" ? "✓" : task.status === "failed" ? "✗" : task.status === "recurring" ? "🔄" : "⏳";
   switch (task.status) {
@@ -61,66 +78,6 @@ function getSummary(task: Task): string {
     default:
       return `${emoji} ${task.name}: ${task.status}`;
   }
-}
-
-function getVisibleTasks(): Task[] {
-  return manager.getTasks()
-    .filter((t) => !t.resultSeen && (t.status === "running" || t.status === "pending" || t.status === "completed" || t.status === "failed" || t.status === "recurring" || t.status === "queued"))
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-}
-
-function buildFooterText(): string | undefined {
-  const visible = getVisibleTasks()
-    .filter((t) => t.type !== "recurring"); // recurring tasks use notifications, not footer
-  
-  if (visible.length === 0) return undefined;
-
-  const running = visible.filter((t) => t.status === "running" || t.status === "pending" || t.status === "queued");
-  const finished = visible.filter((t) => t.status === "completed" || t.status === "failed");
-
-  const parts: string[] = [];
-
-  for (const t of running.slice(0, 2)) {
-    parts.push(`"${t.name}" running`);
-  }
-  const moreRunning = running.length - 2;
-  if (moreRunning > 0) parts.push(`${moreRunning} running`);
-
-  if (finished.length > 0) parts.push(`${finished.length} completed`);
-
-  return `📋 ${parts.join(", ")}`;
-}
-
-function updateFooter(): void {
-  if (!currentCtx) return;
-  currentCtx.ui.setStatus("background-tasks", buildFooterText());
-}
-
-function notifyAgent(summary: string, status: string): void {
-  pendingNotifications.push({ summary, status });
-  if (isAgentIdle && pi) {
-    const n = pendingNotifications.shift();
-    if (!n) return;
-    pi.sendMessage({
-      customType: "background-task",
-      content: `🔔 ${n.summary}`,
-      display: true,
-      details: {},
-    }, { deliverAs: "steer", triggerTurn: true });
-  }
-}
-
-function flushNotifications(): void {
-  if (!pi) return;
-  for (const n of pendingNotifications) {
-    pi.sendMessage({
-      customType: "background-task",
-      content: `🔔 ${n.summary}`,
-      display: true,
-      details: {},
-    }, { deliverAs: "steer", triggerTurn: true });
-  }
-  pendingNotifications = [];
 }
 
 // ── Tools ─────────────────────────────────────────────────────────────
@@ -355,14 +312,14 @@ export default function (piArg: ExtensionAPI) {
 
   pi.on("agent_start", async (_event, ctx) => {
     currentCtx = ctx;
-    isAgentIdle = false;
+    idle = false;
     updateFooter();
   });
 
   pi.on("agent_end", async (_event, ctx) => {
     currentCtx = ctx;
-    isAgentIdle = true;
+    idle = true;
     updateFooter();
-    flushNotifications();
+    queue.flush();
   });
 }
