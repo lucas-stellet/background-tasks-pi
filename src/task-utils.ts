@@ -11,6 +11,29 @@ export function filterTasks(tasks: Task[], filter: TaskFilter): Task[] {
   return tasks;
 }
 
+function formatDuration(task: Task): string {
+  if (task.duration !== undefined) return `${(task.duration / 1000).toFixed(1)}s`;
+  if (task.startedAt && task.status === "running") return "running";
+  return "-";
+}
+
+function formatExit(task: Task): string {
+  return task.exitCode === undefined ? "exit -" : `exit ${task.exitCode}`;
+}
+
+export function formatTaskListForAgent(tasks: Task[]): string {
+  if (tasks.length === 0) return "No background tasks found.";
+
+  const plural = tasks.length === 1 ? "task" : "tasks";
+  const lines = [`${tasks.length} background ${plural}:`];
+
+  for (const task of tasks) {
+    lines.push(`- ${task.id} | ${task.name} | ${task.status} | ${formatExit(task)} | ${formatDuration(task)} | ${task.command}`);
+  }
+
+  return lines.join("\n");
+}
+
 export function markFinishedTasksSeen(tasks: Task[]): void {
   for (const task of tasks) {
     if (task.status === "completed" || task.status === "failed") {

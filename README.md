@@ -10,20 +10,20 @@ It adds tools for one-off and recurring tasks, shows task state in the pi footer
 
 - `run-background-task`: run a shell command once and return immediately with a task ID.
 - `run-recurring-task`: run a command every N seconds until cancelled.
-- `list-background-tasks`: open the task browser, optionally filtered by status.
-- `get-background-task-result`: open the task browser focused on one task.
+- `list-background-tasks`: return a textual task list for agents, optionally filtered by status.
+- `get-background-task-result`: return captured output for one task as text.
 - `cancel-background-task`: stop a pending, running, queued, or recurring task.
 
 ### Commands
 
 - `/run-task <name> <command>`: start a background command from the chat input.
 - `/tasks`: open the task browser.
-- `/list-tasks`: open the task browser.
 
 ### UI behavior
 
 - The footer shows active recurring tasks, running tasks, and finished tasks with unseen results.
 - Finished task notifications are queued while the agent is busy and delivered when it becomes idle.
+- Agent tools return text only; the interactive task browser is available through `/tasks`.
 - The task browser lets you inspect status, command output, duration, IDs, and task details.
 
 ## Install
@@ -71,7 +71,7 @@ command: curl -fsS http://localhost:3000/health
 interval: 30
 ```
 
-Open the browser for active tasks:
+List active tasks from the agent:
 
 ```text
 Use list-background-tasks with:
