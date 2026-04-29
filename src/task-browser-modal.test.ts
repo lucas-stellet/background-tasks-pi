@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { createTaskBrowserState, handleTaskBrowserSearchInput, setTaskBrowserPeriod, setTaskBrowserStatus } from "./task-browser-state.ts";
+import { createTaskBrowserState, handleTaskBrowserSearchInput, moveTaskBrowserSortColumn, setTaskBrowserPeriod, setTaskBrowserSortDirection, setTaskBrowserStatus } from "./task-browser-state.ts";
 import type { Task } from "./task-manager.ts";
 
 function task(id: string, name: string, status: Task["status"], createdAt: string): Task {
@@ -97,6 +97,42 @@ describe("task browser state", () => {
 
     assert.deepEqual(state.preferences, { period: "session", status: "all", query: "mpr" });
     assert.deepEqual(state.visibleTasks.map((t) => t.id), ["precommit"]);
+  });
+
+  it("sorts visible tasks by selected column and direction", () => {
+    let state = createTaskBrowserState({
+      tasks: [
+        { ...task("b-id", "beta", "completed", "2026-04-29T00:00:00.000Z"), duration: 2000 },
+        { ...task("a-id", "alpha", "failed", "2026-04-29T00:00:00.000Z"), duration: 1000 },
+      ],
+      preferences: { period: "session", status: "all", query: "" },
+      sessionStartedAt: "2026-04-29T00:00:00.000Z",
+      now: "2026-04-29T12:00:00.000Z",
+      sort: { column: "name", direction: "asc" },
+    });
+
+    assert.deepEqual(state.visibleTasks.map((t) => t.id), ["a-id", "b-id"]);
+
+    state = setTaskBrowserSortDirection(state);
+
+    assert.deepEqual(state.sort, { column: "name", direction: "desc" });
+    assert.deepEqual(state.visibleTasks.map((t) => t.id), ["b-id", "a-id"]);
+  });
+
+  it("moves the active sort column left and right", () => {
+    let state = createTaskBrowserState({
+      tasks: [],
+      preferences: { period: "session", status: "all", query: "" },
+      sessionStartedAt: "2026-04-29T00:00:00.000Z",
+      now: "2026-04-29T12:00:00.000Z",
+      sort: { column: "name", direction: "asc" },
+    });
+
+    state = moveTaskBrowserSortColumn(state, 1);
+    assert.equal(state.sort.column, "status");
+
+    state = moveTaskBrowserSortColumn(state, -1);
+    assert.equal(state.sort.column, "name");
   });
 
   it("cycles status and period filters", () => {
