@@ -1,49 +1,104 @@
 /**
- * Background Tasks Extension
- * 
- * Enables running scripts, code, and shell commands in the background.
- * Footer shows running/completed tasks (max 2, else "N tasks in background").
- * Tasks are removed from footer when their result is viewed.
+ * Background Tasks Extension for pi
+ *
+ * Tools:
+ *   run-background-task  — run a command once, returns immediately
+ *   run-recurring-task   — run a command every N seconds until cancelled
+ *   list-background-tasks — list all tasks with status filter
+ *   get-background-task-result — get stdout/stderr of completed task
+ *   cancel-background-task — cancel running/pending/recurring task
+ *
+ * Commands:
+ *   /run-task <name> <cmd>
+ *   /list-tasks
+ *   /tasks
+ *
+ * Footer: shows up to 2 running tasks by name, + counts for rest
+ * Notifications: queued when agent busy, delivered immediately when idle
  */
 
 import { StringEnum, Type } from "@mariozechner/pi-ai";
-import { defineTool, type ExtensionAPI, type ExtensionContext } from "@mariozechner/pi-coding-agent";
-import { spawn, type ChildProcess } from "node:child_process";
+import { defineTool, type ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import { createTaskManager, type Task } from "./src/task-manager.ts";
+import { createTaskRunner } from "./src/task-runner.ts";
 
-// Types
-type TaskStatus = "pending" | "running" | "completed" | "failed" | "cancelled";
-
-interface BackgroundTask {
-  id: string;
-  name: string;
-  command: string;
-  status: TaskStatus;
-  createdAt: string;
-  startedAt?: string;
-  completedAt?: string;
-  exitCode?: number;
-  stdout?: string;
-  stderr?: string;
-  duration?: number;
-  error?: string;
-  resultSeen: boolean;
-}
-
-// State
-const tasks = new Map<string, BackgroundTask>();
-const childProcesses = new Map<string, ChildProcess>();
-let taskIdCounter = 0;
-let currentCtx: { ui: { setStatus: (id: string, text: string | undefined) => void } } | null = null;
-
-// Notification queue
+// ── State ────────────────────────────────────────────────────────────
 let pi: ExtensionAPI | null = null;
 let isAgentIdle = true;
+let currentCtx: { ui: { setStatus: (id: string, text: string | undefined) => void } } | null = null;
 let pendingNotifications: Array<{ summary: string; status: string }> = [];
+
+const manager = createTaskManager({ maxConcurrent: 5 });
+const runner = createTaskRunner({
+  onTaskStart(task) {
+    updateFooter();
+  },
+  onTaskComplete(task) {
+    updateFooter();
+    notifyAgent(getSummary(task), "completed");
+  },
+  onTaskError(task, error) {
+    updateFooter();
+    notifyAgent(`${task.name}: ${error}`, "failed");
+  },
+  onRecurringCycle(task) {
+    updateFooter();
+    const output = task.stdout?.trim() || "(no output)";
+    notifyAgent(`${task.name}: ${output}`, "recurring");
+  },
+});
+
+// ── Helpers ───────────────────────────────────────────────────────────
+function getSummary(task: Task): string {
+  const emoji = task.status === "completed" ? "✓" : task.status === "failed" ? "✗" : task.status === "recurring" ? "🔄" : "⏳";
+  switch (task.status) {
+    case "completed":
+      return `${emoji} ${task.name}: exit ${task.exitCode} in ${((task.duration ?? 0) / 1000).toFixed(1)}s`;
+    case "failed":
+      return `${emoji} ${task.name}: ${task.error ?? "failed"}`;
+    case "recurring":
+      return `${emoji} ${task.name}: recurring every ${task.interval}s`;
+    default:
+      return `${emoji} ${task.name}: ${task.status}`;
+  }
+}
+
+function getVisibleTasks(): Task[] {
+  return manager.getTasks()
+    .filter((t) => !t.resultSeen && (t.status === "running" || t.status === "pending" || t.status === "completed" || t.status === "failed" || t.status === "recurring" || t.status === "queued"))
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+}
+
+function buildFooterText(): string | undefined {
+  const visible = getVisibleTasks();
+  if (visible.length === 0) return undefined;
+
+  const running = visible.filter((t) => t.status === "running" || t.status === "pending" || t.status === "queued");
+  const finished = visible.filter((t) => t.status === "completed" || t.status === "failed");
+  const recurring = visible.filter((t) => t.status === "recurring");
+
+  const parts: string[] = [];
+
+  for (const t of running.slice(0, 2)) {
+    parts.push(`"${t.name}" running`);
+  }
+  const moreRunning = running.length - 2;
+  if (moreRunning > 0) parts.push(`${moreRunning} running`);
+
+  if (finished.length > 0) parts.push(`${finished.length} completed`);
+  if (recurring.length > 0) parts.push(`${recurring.length} recurring`);
+
+  return `📋 ${parts.join(", ")}`;
+}
+
+function updateFooter(): void {
+  if (!currentCtx) return;
+  currentCtx.ui.setStatus("background-tasks", buildFooterText());
+}
 
 function notifyAgent(summary: string, status: string): void {
   pendingNotifications.push({ summary, status });
   if (isAgentIdle && pi) {
-    // Agent is idle — wake up immediately
     const n = pendingNotifications.shift();
     if (!n) return;
     pi.sendMessage({
@@ -53,7 +108,6 @@ function notifyAgent(summary: string, status: string): void {
       details: {},
     }, { deliverAs: "steer", triggerTurn: true });
   }
-  // If busy, notifications stay queued; delivered in agent_end
 }
 
 function flushNotifications(): void {
@@ -69,135 +123,7 @@ function flushNotifications(): void {
   pendingNotifications = [];
 }
 
-function generateTaskId(): string {
-  return `task_${Date.now()}_${++taskIdCounter}`;
-}
-
-function getStatusEmoji(status: TaskStatus): string {
-  switch (status) {
-    case "completed": return "✓";
-    case "failed": return "✗";
-    case "running": return "⏳";
-    case "cancelled": return "⊘";
-    case "pending": return "○";
-  }
-}
-
-function getTaskSummary(task: BackgroundTask): string {
-  const emoji = getStatusEmoji(task.status);
-  switch (task.status) {
-    case "completed":
-      const duration = task.duration ? ` in ${(task.duration / 1000).toFixed(1)}s` : "";
-      return `${emoji} ${task.name}: exit ${task.exitCode}${duration}`;
-    case "failed":
-      return `${emoji} ${task.name}: ${task.error || "failed"}`;
-    case "running":
-      return `${emoji} ${task.name}: running...`;
-    default:
-      return `${emoji} ${task.name}: ${task.status}`;
-  }
-}
-
-// Footer
-function getVisibleTasks(): BackgroundTask[] {
-  return Array.from(tasks.values())
-    .filter((t) => !t.resultSeen && (t.status === "running" || t.status === "pending" || t.status === "completed" || t.status === "failed"))
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-}
-
-function buildFooterText(): string | undefined {
-  const visible = getVisibleTasks();
-  if (visible.length === 0) return undefined;
-
-  const running = visible.filter((t) => t.status === "running" || t.status === "pending");
-  const finished = visible.filter((t) => t.status === "completed" || t.status === "failed");
-
-  let parts: string[] = [];
-
-  // Show up to 2 running tasks by name
-  const showRunning = running.slice(0, 2);
-  for (const t of showRunning) {
-    parts.push(`"${t.name}" running`);
-  }
-  const remainingRunning = running.length - showRunning.length;
-  if (remainingRunning > 0) {
-    parts.push(`${remainingRunning} running`);
-  }
-
-  // Show completed/failed count
-  if (finished.length > 0) {
-    parts.push(`${finished.length} completed`);
-  }
-
-  return `📋 ${parts.join(", ")}`;
-}
-
-function updateFooter(): void {
-  if (!currentCtx) return;
-  const text = buildFooterText();
-  currentCtx.ui.setStatus("background-tasks", text);
-}
-
-function markResultSeen(taskId: string): void {
-  const task = tasks.get(taskId);
-  if (task) {
-    task.resultSeen = true;
-    updateFooter();
-  }
-}
-
-function markAllResultsSeen(): void {
-  for (const task of tasks.values()) {
-    task.resultSeen = true;
-  }
-  updateFooter();
-}
-
-// Task runner
-function runBackgroundTask(task: BackgroundTask): void {
-  task.status = "running";
-  task.startedAt = new Date().toISOString();
-  updateFooter();
-
-  const startTime = Date.now();
-  let stdout = "";
-  let stderr = "";
-
-  const child = spawn("/bin/sh", ["-c", task.command], {
-    cwd: process.cwd(),
-    stdio: ["ignore", "pipe", "pipe"],
-  });
-
-  childProcesses.set(task.id, child);
-
-  child.stdout?.on("data", (data: Buffer) => { stdout += data.toString(); });
-  child.stderr?.on("data", (data: Buffer) => { stderr += data.toString(); });
-
-  child.on("close", (code: number | null) => {
-    childProcesses.delete(task.id);
-    task.status = code === 0 ? "completed" : "failed";
-    task.completedAt = new Date().toISOString();
-    task.exitCode = code ?? undefined;
-    task.stdout = stdout;
-    task.stderr = stderr;
-    task.duration = Date.now() - startTime;
-    if (code !== 0) task.error = `exit code ${code}`;
-    updateFooter();
-    notifyAgent(getTaskSummary(task), task.status);
-  });
-
-  child.on("error", (error: Error) => {
-    childProcesses.delete(task.id);
-    task.status = "failed";
-    task.completedAt = new Date().toISOString();
-    task.error = error.message;
-    task.duration = Date.now() - startTime;
-    updateFooter();
-    notifyAgent(getTaskSummary(task), "failed");
-  });
-}
-
-// Tools
+// ── Tools ─────────────────────────────────────────────────────────────
 const runBackgroundTaskTool = defineTool({
   name: "run-background-task",
   label: "Run Background Task",
@@ -212,24 +138,64 @@ const runBackgroundTaskTool = defineTool({
   parameters: Type.Object({
     name: Type.String({ description: "Descriptive name for the task" }),
     command: Type.String({ description: "Shell command to execute" }),
+    timeout: Type.Optional(Type.Number({ description: "Timeout in seconds (default: 300)" })),
   }),
 
-  async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
-    const task: BackgroundTask = {
-      id: generateTaskId(),
+  async execute(_id, params) {
+    const task = manager.createBackground({
       name: params.name,
       command: params.command,
-      status: "pending",
-      createdAt: new Date().toISOString(),
-      resultSeen: false,
-    };
+      timeout: params.timeout ?? 300,
+    });
 
-    tasks.set(task.id, task);
-    runBackgroundTask(task);
+    runner.run(task);
+    updateFooter();
 
     return {
-      content: [{ type: "text", text: `Started background task: ${task.name}\nTask ID: ${task.id}` }],
+      content: [{ type: "text", text: `Started: "${task.name}" (${task.id})` }],
       details: { taskId: task.id, status: task.status },
+    };
+  },
+});
+
+const runRecurringTaskTool = defineTool({
+  name: "run-recurring-task",
+  label: "Run Recurring Task",
+  description: "Run a shell command every N seconds until cancelled. Use cancel-background-task to stop.",
+  promptSnippet: "Run a command repeatedly at fixed intervals until cancelled",
+  promptGuidelines: [
+    "Use run-recurring-task when the user wants a command to run repeatedly on a schedule — e.g. polling a status, watching a file, periodic health checks.",
+    "The task runs forever until cancelled with cancel-background-task.",
+    "Give it a descriptive name so the user can identify it in the footer.",
+  ],
+  parameters: Type.Object({
+    name: Type.String({ description: "Descriptive name for the task" }),
+    command: Type.String({ description: "Shell command to execute" }),
+    interval: Type.Number({ description: "Interval in seconds between runs" }),
+    timeout: Type.Optional(Type.Number({ description: "Timeout per run in seconds (default: 300)" })),
+  }),
+
+  async execute(_id, params) {
+    const task = manager.createRecurring({
+      name: params.name,
+      command: params.command,
+      interval: params.interval,
+    });
+    task.timeout = params.timeout;
+
+    // Run immediately, then on interval
+    const runLoop = async () => {
+      if (task.status !== "recurring") return;
+      await runner.run(task);
+      updateFooter();
+      setTimeout(runLoop, params.interval * 1000);
+    };
+    runLoop();
+    updateFooter();
+
+    return {
+      content: [{ type: "text", text: `Started recurring: "${task.name}" every ${params.interval}s (${task.id})` }],
+      details: { taskId: task.id, status: "recurring" },
     };
   },
 });
@@ -247,32 +213,29 @@ const listBackgroundTasksTool = defineTool({
     filter: Type.Optional(StringEnum(["all", "active", "completed", "failed"] as const)),
   }),
 
-  async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
-    let taskList = Array.from(tasks.values());
+  async execute(_id, params) {
+    let taskList = manager.getTasks();
 
     if (params.filter === "active") {
-      taskList = taskList.filter((t) => t.status === "pending" || t.status === "running");
+      taskList = taskList.filter((t) => t.status === "pending" || t.status === "running" || t.status === "queued" || t.status === "recurring");
     } else if (params.filter === "completed") {
       taskList = taskList.filter((t) => t.status === "completed");
     } else if (params.filter === "failed") {
       taskList = taskList.filter((t) => t.status === "failed");
     }
 
-    // Mark all completed/failed tasks as seen
-    markAllResultsSeen();
+    // Mark all finished as seen
+    for (const t of taskList) {
+      if (t.status === "completed" || t.status === "failed") t.resultSeen = true;
+    }
+    updateFooter();
 
     if (taskList.length === 0) {
-      return {
-        content: [{ type: "text", text: "No background tasks found." }],
-        details: { count: 0 },
-      };
+      return { content: [{ type: "text", text: "No background tasks found." }], details: { count: 0 } };
     }
 
-    const summary = taskList.map(getTaskSummary).join("\n");
-    return {
-      content: [{ type: "text", text: `Background Tasks (${taskList.length}):\n${summary}` }],
-      details: { count: taskList.length },
-    };
+    const summary = taskList.map(getSummary).join("\n");
+    return { content: [{ type: "text", text: `Tasks (${taskList.length}):\n${summary}` }], details: { count: taskList.length } };
   },
 });
 
@@ -285,170 +248,109 @@ const getBackgroundTaskResultTool = defineTool({
     "Use get-background-task-result when the user wants to see the output of a specific completed task.",
     "The user may reference the task by name or ID — match it against the task list.",
   ],
-  parameters: Type.Object({
-    taskId: Type.String({ description: "The task ID" }),
-  }),
+  parameters: Type.Object({ taskId: Type.String({ description: "The task ID" }) }),
 
-  async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
-    const task = tasks.get(params.taskId);
-    if (!task) {
-      return {
-        content: [{ type: "text", text: `Task not found: ${params.taskId}` }],
-        details: { error: "not found" },
-      };
-    }
+  async execute(_id, params) {
+    const task = manager.getTask(params.taskId);
+    if (!task) return { content: [{ type: "text", text: `Task not found: ${params.taskId}` }], details: { error: "not found" } };
 
-    markResultSeen(params.taskId);
+    task.resultSeen = true;
+    updateFooter();
 
-    let output = getTaskSummary(task);
+    let output = getSummary(task);
     if (task.stdout) output += `\n\nSTDOUT:\n${task.stdout}`;
     if (task.stderr) output += `\n\nSTDERR:\n${task.stderr}`;
 
-    return {
-      content: [{ type: "text", text: output }],
-      details: task,
-    };
+    return { content: [{ type: "text", text: output }], details: task };
   },
 });
 
 const cancelBackgroundTaskTool = defineTool({
   name: "cancel-background-task",
   label: "Cancel Task",
-  description: "Cancel a running or pending background task",
-  promptSnippet: "Cancel running or pending background tasks by ID",
+  description: "Cancel a running, pending, queued, or recurring background task",
+  promptSnippet: "Cancel running, pending, queued, or recurring background tasks by ID",
   promptGuidelines: [
-    "Use cancel-background-task when the user wants to stop a running task.",
-    "Only pending or running tasks can be cancelled — completed/failed tasks cannot.",
+    "Use cancel-background-task when the user wants to stop a running or recurring task.",
+    "Only pending, running, queued, or recurring tasks can be cancelled.",
   ],
-  parameters: Type.Object({
-    taskId: Type.String({ description: "The task ID to cancel" }),
-  }),
+  parameters: Type.Object({ taskId: Type.String({ description: "The task ID to cancel" }) }),
 
-  async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
-    const task = tasks.get(params.taskId);
-    if (!task) {
-      return {
-        content: [{ type: "text", text: `Task not found: ${params.taskId}` }],
-        details: { error: "not found" },
-      };
+  async execute(_id, params) {
+    const task = manager.getTask(params.taskId);
+    if (!task) return { content: [{ type: "text", text: `Task not found: ${params.taskId}` }], details: { error: "not found" } };
+
+    if (!["pending", "running", "queued", "recurring"].includes(task.status)) {
+      return { content: [{ type: "text", text: `Cannot cancel task in status: ${task.status}` }], details: { error: `Task is ${task.status}` } };
     }
 
-    if (task.status !== "pending" && task.status !== "running") {
-      return {
-        content: [{ type: "text", text: `Cannot cancel task in status: ${task.status}` }],
-        details: { error: `Task is ${task.status}` },
-      };
-    }
-
-    const child = childProcesses.get(params.taskId);
-    if (child) {
-      child.kill("SIGTERM");
-      childProcesses.delete(params.taskId);
-    }
-
-    task.status = "cancelled";
-    task.completedAt = new Date().toISOString();
+    runner.cancel(params.taskId);
+    manager.cancelTask(params.taskId);
     updateFooter();
 
-    return {
-      content: [{ type: "text", text: `Cancelled task: ${task.name}` }],
-      details: task,
-    };
+    return { content: [{ type: "text", text: `Cancelled: "${task.name}"` }], details: task };
   },
 });
 
-// Extension
+// ── Commands ──────────────────────────────────────────────────────────
 export default function (piArg: ExtensionAPI) {
   pi = piArg;
   pi.registerTool(runBackgroundTaskTool);
+  pi.registerTool(runRecurringTaskTool);
   pi.registerTool(listBackgroundTasksTool);
   pi.registerTool(getBackgroundTaskResultTool);
   pi.registerTool(cancelBackgroundTaskTool);
 
-  // Commands
   pi.registerCommand("tasks", {
     description: "Show background task status",
     handler: async (_args, ctx) => {
-      const taskList = Array.from(tasks.values());
-      const running = taskList.filter((t) => t.status === "running" || t.status === "pending");
-      const completed = taskList.filter((t) => t.status === "completed").length;
-      const failed = taskList.filter((t) => t.status === "failed").length;
-
-      if (taskList.length === 0) {
-        ctx.ui.notify("No background tasks", "info");
-      } else {
-        ctx.ui.notify(`${running.length} active, ${completed} completed, ${failed} failed`, "info");
-      }
+      const list = manager.getTasks();
+      const running = list.filter((t) => ["running", "pending", "queued", "recurring"].includes(t.status)).length;
+      const completed = list.filter((t) => t.status === "completed").length;
+      const failed = list.filter((t) => t.status === "failed").length;
+      if (list.length === 0) ctx.ui.notify("No background tasks", "info");
+      else ctx.ui.notify(`${running} active, ${completed} completed, ${failed} failed`, "info");
     },
   });
 
   pi.registerCommand("run-task", {
     description: "Run a background task: /run-task <name> <command>",
     handler: async (args) => {
-      if (!args) {
-        pi.sendMessage({ customType: "background-task", content: "Usage: /run-task <name> <command>", display: true });
-        return;
-      }
-
+      if (!args) { pi!.sendMessage({ customType: "background-task", content: "Usage: /run-task <name> <command>", display: true }); return; }
       const parts = args.match(/^(\S+)\s+(.+)$/);
-      if (!parts) {
-        pi.sendMessage({ customType: "background-task", content: "Usage: /run-task <name> <command>", display: true });
-        return;
-      }
-
+      if (!parts) { pi!.sendMessage({ customType: "background-task", content: "Usage: /run-task <name> <command>", display: true }); return; }
       const [, name, command] = parts;
-      const task: BackgroundTask = {
-        id: generateTaskId(), name, command, status: "pending",
-        createdAt: new Date().toISOString(), resultSeen: false,
-      };
-
-      tasks.set(task.id, task);
-      runBackgroundTask(task);
-
-      pi.sendMessage({
-        customType: "background-task",
-        content: `Started: "${name}" (${task.id})`,
-        display: true,
-        details: { taskId: task.id, name, command },
-      });
+      const task = manager.createBackground({ name, command, timeout: 300 });
+      runner.run(task);
+      updateFooter();
+      pi!.sendMessage({ customType: "background-task", content: `Started: "${name}" (${task.id})`, display: true, details: { taskId: task.id } });
     },
   });
 
   pi.registerCommand("list-tasks", {
     description: "List all background tasks and their status",
     handler: async () => {
-      const taskList = Array.from(tasks.values());
-
-      if (taskList.length === 0) {
-        pi.sendMessage({ customType: "background-task", content: "No background tasks.", display: true });
-        return;
+      const list = manager.getTasks();
+      if (list.length === 0) { pi!.sendMessage({ customType: "background-task", content: "No background tasks.", display: true }); return; }
+      for (const t of list) { if (t.status === "completed" || t.status === "failed") t.resultSeen = true; }
+      updateFooter();
+      let output = `Tasks (${list.length}):\n`;
+      for (const t of list) {
+        output += `${getSummary(t)}\n`;
+        if (t.stdout) output += `  STDOUT: ${t.stdout.trim().split("\n").slice(0, 3).join(" | ")}\n`;
       }
-
-      markAllResultsSeen();
-
-      let output = `Background Tasks (${taskList.length}):\n`;
-      for (const task of taskList) {
-        output += `${getTaskSummary(task)}\n`;
-        if (task.stdout) {
-          const lines = task.stdout.trim().split('\n').slice(0, 5).join('\n  ');
-          if (lines) output += `  STDOUT: ${lines}\n`;
-        }
-      }
-
-      pi.sendMessage({ customType: "background-task", content: output, display: true, details: { count: taskList.length } });
+      pi!.sendMessage({ customType: "background-task", content: output, display: true, details: { count: list.length } });
     },
   });
 
-  // Lifecycle
   pi.on("session_start", async (_event, ctx) => {
-    tasks.clear();
-    childProcesses.clear();
     currentCtx = ctx;
     updateFooter();
   });
 
   pi.on("session_shutdown", async () => {
     currentCtx = null;
+    runner.cancelAll();
   });
 
   pi.on("agent_start", async (_event, ctx) => {
