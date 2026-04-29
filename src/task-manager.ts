@@ -51,6 +51,7 @@ function generateId(): string {
 export function createTaskManager(options: TaskManagerOptions) {
   const maxConcurrent = options.maxConcurrent ?? Infinity;
   const cwd = options.cwd ?? process.cwd();
+  const sessionStartedAt = new Date().toISOString();
   const tasks = new Map<string, Task>();
 
   function resultPaths(id: string) {
@@ -186,6 +187,14 @@ export function createTaskManager(options: TaskManagerOptions) {
 
     getTasks(): Task[] {
       return Array.from(tasks.values());
+    },
+
+    getSessionStartedAt(): string {
+      return sessionStartedAt;
+    },
+
+    getCwd(): string {
+      return cwd;
     },
   };
 }

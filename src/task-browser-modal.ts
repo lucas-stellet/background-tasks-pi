@@ -2,6 +2,15 @@ import type { Theme } from "@mariozechner/pi-coding-agent";
 import type { Component, TUI } from "@mariozechner/pi-tui";
 import { matchesKey, truncateToWidth, visibleWidth } from "@mariozechner/pi-tui";
 import type { Task } from "./task-manager.ts";
+import {
+  createTaskBrowserState,
+  handleTaskBrowserSearchInput,
+  setTaskBrowserPeriod,
+  setTaskBrowserQuery,
+  setTaskBrowserStatus,
+  type TaskBrowserState,
+} from "./task-browser-state.ts";
+import type { TaskBrowserPreferences } from "./task-utils.ts";
 
 const OVERLAY_WIDTH = 84;
 const LIST_VIEWPORT_HEIGHT = 8;
@@ -109,6 +118,10 @@ export class TaskBrowserModal implements Component {
   private readonly theme: Theme;
   private readonly onClose: () => void;
   private readonly onCancel: (taskId: string) => void;
+  private readonly onPreferencesChange: (preferences: TaskBrowserPreferences) => void;
+  private readonly now: () => string;
+  private state: TaskBrowserState;
+  private searchMode = false;
   private screen: "list" | "detail" = "list";
   private cursor = 0;
   private scrollOffset = 0;
@@ -116,27 +129,58 @@ export class TaskBrowserModal implements Component {
 
   constructor(options: {
     tasks: Task[];
+    preferences: TaskBrowserPreferences;
+    sessionStartedAt: string;
     selectedIndex?: number;
+    now?: () => string;
     tui: TUI;
     theme: Theme;
     onClose: () => void;
     onCancel: (taskId: string) => void;
+    onPreferencesChange: (preferences: TaskBrowserPreferences) => void;
   }) {
     this.tasks = options.tasks;
-    this.cursor = Math.max(0, Math.min(options.selectedIndex ?? 0, Math.max(0, this.tasks.length - 1)));
+    this.now = options.now ?? (() => new Date().toISOString());
+    this.state = createTaskBrowserState({
+      tasks: this.tasks,
+      preferences: options.preferences,
+      sessionStartedAt: options.sessionStartedAt,
+      now: this.now(),
+    });
+    this.cursor = Math.max(0, Math.min(options.selectedIndex ?? 0, Math.max(0, this.state.visibleTasks.length - 1)));
     this.tui = options.tui;
     this.theme = options.theme;
     this.onClose = options.onClose;
     this.onCancel = options.onCancel;
+    this.onPreferencesChange = options.onPreferencesChange;
+    this.ensureScrollVisible();
+  }
+
+  private refreshState(): void {
+    this.state = createTaskBrowserState({
+      tasks: this.tasks,
+      preferences: this.state.preferences,
+      sessionStartedAt: this.state.sessionStartedAt,
+      now: this.now(),
+    });
+    this.cursor = Math.min(this.cursor, Math.max(0, this.state.visibleTasks.length - 1));
+    this.ensureScrollVisible();
+  }
+
+  private updateState(next: TaskBrowserState): void {
+    this.state = next;
+    this.cursor = 0;
+    this.scrollOffset = 0;
+    this.onPreferencesChange(this.state.preferences);
     this.ensureScrollVisible();
   }
 
   private selectedTask(): Task | undefined {
-    return this.tasks[this.cursor];
+    return this.state.visibleTasks[this.cursor];
   }
 
   private ensureScrollVisible(): void {
-    if (this.tasks.length <= LIST_VIEWPORT_HEIGHT) {
+    if (this.state.visibleTasks.length <= LIST_VIEWPORT_HEIGHT) {
       this.scrollOffset = 0;
       return;
     }
@@ -155,6 +199,25 @@ export class TaskBrowserModal implements Component {
   }
 
   handleInput(data: string): void {
+    this.refreshState();
+
+    if (this.searchMode) {
+      if (matchesKey(data, "escape")) {
+        if (this.state.preferences.query) this.updateState(setTaskBrowserQuery(this.state, ""));
+        else this.searchMode = false;
+        this.tui.requestRender();
+        return;
+      }
+      if (matchesKey(data, "return")) {
+        this.searchMode = false;
+        this.tui.requestRender();
+        return;
+      }
+      this.updateState(handleTaskBrowserSearchInput(this.state, data));
+      this.tui.requestRender();
+      return;
+    }
+
     if (this.screen === "detail" && matchesKey(data, "escape")) {
       this.screen = "list";
       this.detailScrollOffset = 0;
@@ -176,6 +239,24 @@ export class TaskBrowserModal implements Component {
       return;
     }
 
+    if (data === "/" || matchesKey(data, "/")) {
+      this.searchMode = true;
+      this.tui.requestRender();
+      return;
+    }
+
+    if (matchesKey(data, "s")) {
+      this.updateState(setTaskBrowserStatus(this.state));
+      this.tui.requestRender();
+      return;
+    }
+
+    if (matchesKey(data, "p")) {
+      this.updateState(setTaskBrowserPeriod(this.state));
+      this.tui.requestRender();
+      return;
+    }
+
     if (matchesKey(data, "return")) {
       if (this.selectedTask()) {
         this.screen = "detail";
@@ -193,7 +274,7 @@ export class TaskBrowserModal implements Component {
     }
 
     if (matchesKey(data, "down")) {
-      this.cursor = Math.min(Math.max(0, this.tasks.length - 1), this.cursor + 1);
+      this.cursor = Math.min(Math.max(0, this.state.visibleTasks.length - 1), this.cursor + 1);
       this.ensureScrollVisible();
       this.tui.requestRender();
       return;
@@ -207,7 +288,7 @@ export class TaskBrowserModal implements Component {
     }
 
     if (matchesKey(data, "end")) {
-      this.cursor = Math.max(0, this.tasks.length - 1);
+      this.cursor = Math.max(0, this.state.visibleTasks.length - 1);
       this.ensureScrollVisible();
       this.tui.requestRender();
       return;
@@ -241,12 +322,17 @@ export class TaskBrowserModal implements Component {
   }
 
   private renderList(width: number, innerW: number): string[] {
+    this.refreshState();
     const lines: string[] = [renderHeader(" Background Tasks ", width, this.theme)];
     const selected = this.selectedTask();
-    const visible = this.tasks.slice(this.scrollOffset, this.scrollOffset + LIST_VIEWPORT_HEIGHT);
+    const visibleTasks = this.state.visibleTasks;
+    const visible = visibleTasks.slice(this.scrollOffset, this.scrollOffset + LIST_VIEWPORT_HEIGHT);
+    const searchCursor = this.searchMode ? this.theme.fg("accent", "█") : "";
+    const query = this.state.preferences.query ? `${this.state.preferences.query}${searchCursor}` : searchCursor;
+    lines.push(row(`${this.theme.fg("dim", "period:")} ${this.state.preferences.period}  ${this.theme.fg("dim", "status:")} ${this.state.preferences.status}  ${this.theme.fg("dim", "search:")} ${query}`, width, this.theme));
 
     if (visible.length === 0) {
-      lines.push(row(this.theme.fg("dim", " No background tasks found."), width, this.theme));
+      lines.push(row(this.theme.fg("dim", " No background tasks match the current filters."), width, this.theme));
       for (let i = 1; i < LIST_VIEWPORT_HEIGHT; i++) lines.push(row("", width, this.theme));
     } else {
       lines.push(row(this.theme.fg("dim", "   name                     status       time     id"), width, this.theme));
@@ -261,13 +347,13 @@ export class TaskBrowserModal implements Component {
       }
     }
 
-    const scrollInfo = formatScrollInfo(this.scrollOffset, Math.max(0, this.tasks.length - (this.scrollOffset + LIST_VIEWPORT_HEIGHT)));
+    const scrollInfo = formatScrollInfo(this.scrollOffset, Math.max(0, visibleTasks.length - (this.scrollOffset + LIST_VIEWPORT_HEIGHT)));
     lines.push(row(scrollInfo ? this.theme.fg("dim", scrollInfo) : "", width, this.theme));
 
     if (selected) lines.push(...this.renderSummary(selected, width, innerW));
     else lines.push(row(this.theme.fg("dim", "No task selected."), width, this.theme));
 
-    lines.push(renderFooter(" ↑↓ select  enter detail  x cancel  q/esc close ", width, this.theme));
+    lines.push(renderFooter(" ↑↓ select  / search  p period  s status  enter detail  x cancel  q/esc close ", width, this.theme));
     return lines;
   }
 

@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { filterTasks, formatTaskListForAgent, markFinishedTasksSeen, markTerminalTaskSeen } from "./task-utils.ts";
+import { applyTaskBrowserFilters, filterTasks, formatTaskListForAgent, markFinishedTasksSeen, markTerminalTaskSeen } from "./task-utils.ts";
 import type { Task } from "./task-manager.ts";
 
 function task(status: Task["status"], resultSeen = false): Task {
@@ -13,6 +13,18 @@ function task(status: Task["status"], resultSeen = false): Task {
     command: "echo ok",
     createdAt: new Date(0).toISOString(),
     resultSeen,
+  };
+}
+
+function namedTask(id: string, name: string, status: Task["status"], command: string, createdAt: string): Task {
+  return {
+    id,
+    type: "background",
+    status,
+    name,
+    command,
+    createdAt,
+    resultSeen: false,
   };
 }
 
@@ -52,6 +64,21 @@ describe("extension commands", () => {
     assert.match(source, /manager\.markTasksSeen\(taskList\)/);
     assert.match(source, /manager\.markTasksSeen\(list\)/);
   });
+
+  it("loads and saves task browser preferences for the interactive modal", async () => {
+    const source = await readFile(new URL("../index.ts", import.meta.url), "utf8");
+
+    assert.match(source, /loadTaskBrowserConfig/);
+    assert.match(source, /saveTaskBrowserConfig/);
+    assert.match(source, /preferences: config\.taskBrowser/);
+    assert.match(source, /onPreferencesChange/);
+  });
+
+  it("passes session start time to the task browser modal", async () => {
+    const source = await readFile(new URL("../index.ts", import.meta.url), "utf8");
+
+    assert.match(source, /sessionStartedAt: manager\.getSessionStartedAt\(\)/);
+  });
 });
 
 describe("task utils", () => {
@@ -82,6 +109,50 @@ describe("task utils", () => {
     const tasks = [task("completed"), task("failed"), task("running"), task("queued"), task("recurring")];
 
     assert.deepEqual(filterTasks(tasks, "active").map((t) => t.status), ["running", "queued", "recurring"]);
+  });
+
+  it("filters task browser tasks to the current session by default", () => {
+    const tasks = [
+      namedTask("old", "old task", "completed", "npm test", "2026-04-28T23:59:59.000Z"),
+      namedTask("current", "current task", "completed", "npm test", "2026-04-29T00:00:00.000Z"),
+    ];
+
+    const filtered = applyTaskBrowserFilters(tasks, { period: "session", status: "all", query: "" }, {
+      sessionStartedAt: "2026-04-29T00:00:00.000Z",
+      now: "2026-04-29T12:00:00.000Z",
+    });
+
+    assert.deepEqual(filtered.map((t) => t.id), ["current"]);
+  });
+
+  it("filters task browser tasks by period and status", () => {
+    const tasks = [
+      namedTask("old-failed", "old failed", "failed", "npm test", "2026-04-20T00:00:00.000Z"),
+      namedTask("recent-completed", "recent completed", "completed", "npm test", "2026-04-29T11:00:00.000Z"),
+      namedTask("recent-failed", "recent failed", "failed", "npm test", "2026-04-29T11:30:00.000Z"),
+    ];
+
+    const filtered = applyTaskBrowserFilters(tasks, { period: "24h", status: "failed", query: "" }, {
+      sessionStartedAt: "2026-04-29T00:00:00.000Z",
+      now: "2026-04-29T12:00:00.000Z",
+    });
+
+    assert.deepEqual(filtered.map((t) => t.id), ["recent-failed"]);
+  });
+
+  it("fuzzy searches task browser tasks by name, command, id, and status", () => {
+    const tasks = [
+      namedTask("task-precommit", "mix precommit", "completed", "mix precommit", "2026-04-29T11:00:00.000Z"),
+      namedTask("task-lint", "eslint", "failed", "npm run lint", "2026-04-29T11:01:00.000Z"),
+      namedTask("task-build", "build", "completed", "npm run build", "2026-04-29T11:02:00.000Z"),
+    ];
+
+    const filtered = applyTaskBrowserFilters(tasks, { period: "all", status: "all", query: "mpre" }, {
+      sessionStartedAt: "2026-04-29T00:00:00.000Z",
+      now: "2026-04-29T12:00:00.000Z",
+    });
+
+    assert.deepEqual(filtered.map((t) => t.id), ["task-precommit"]);
   });
 
   it("formats a textual task list for agent tool results", () => {

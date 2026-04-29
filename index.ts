@@ -30,6 +30,7 @@ import { createTaskRunner } from "./src/task-runner.ts";
 import { buildFooterText } from "./src/footer.ts";
 import { createNotificationQueue, type Notifier } from "./src/notifier.ts";
 import { TaskBrowserModal } from "./src/task-browser-modal.ts";
+import { loadTaskBrowserConfig, saveTaskBrowserConfig } from "./src/task-browser-config.ts";
 import { filterTasks, formatTaskListForAgent } from "./src/task-utils.ts";
 
 // ── State ────────────────────────────────────────────────────────────
@@ -270,6 +271,7 @@ export default function (piArg: ExtensionAPI) {
 
       manager.markTasksSeen(list);
       updateFooter();
+      const config = loadTaskBrowserConfig(manager.getCwd());
 
       if (ctx.ui) {
         await ctx.ui.custom((tui, theme, _kb, done) => {
@@ -284,10 +286,13 @@ export default function (piArg: ExtensionAPI) {
 
           const modal = new TaskBrowserModal({
             tasks: list,
+            preferences: config.taskBrowser,
+            sessionStartedAt: manager.getSessionStartedAt(),
             tui,
             theme,
             onClose: () => done(undefined),
             onCancel: handleCancel,
+            onPreferencesChange: (preferences) => saveTaskBrowserConfig(manager.getCwd(), preferences),
           });
 
           return {

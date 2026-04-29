@@ -88,12 +88,18 @@ taskId: task_...
 
 ## Task browser keys
 
+The task browser defaults to the current session so old task history does not overwhelm the list. Preferences are saved per project in `.background-tasks/config.json`.
+
 - `up` / `down`: move through the task list or scroll details.
-- `enter`: open the selected task detail view.
+- `/`: search tasks by name, command, ID, or status.
+- `p`: cycle period filter: `session`, `24h`, `7d`, `all`.
+- `s`: cycle status filter: `all`, `active`, `completed`, `failed`, `cancelled`.
+- `enter`: open the selected task detail view, or leave search mode.
 - `home` / `end`: jump to the first or last task.
 - `pageup` / `pagedown`: scroll details faster.
 - `x` or `d`: cancel the selected active task.
-- `escape` or `q`: close the browser, or return from detail view to the list.
+- `escape`: clear/exit search, close the browser, or return from detail view to the list.
+- `q`: close the browser.
 
 ## Development
 
