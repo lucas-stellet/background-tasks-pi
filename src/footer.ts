@@ -7,27 +7,32 @@ export function buildFooterText(tasks: Task[]): string | undefined {
 
   if (visible.length === 0) return undefined;
 
-  // Recurring tasks count as "running", never as "completed"
-  const running = visible.filter((t) =>
-    t.status === "running" || t.status === "pending" || t.status === "queued" || t.status === "recurring"
-  );
-  const finished = visible.filter((t) =>
-    t.status === "completed" || t.status === "failed"
-  );
+  const recurring = visible.filter((t) => t.status === "recurring");
+  const running = visible.filter((t) => t.status === "running" || t.status === "pending" || t.status === "queued");
+  const finished = visible.filter((t) => t.status === "completed" || t.status === "failed");
 
-  const parts: string[] = [];
+  const sections: string[] = [];
 
+  // Recurring section
+  if (recurring.length > 0) {
+    const names = recurring.slice(0, 2).map((t) => `"${t.name}" recurring`).join(", ");
+    const more = recurring.length > 2 ? `, +${recurring.length - 2} more` : "";
+    sections.push(`🔄 ${names}${more}`);
+  }
+
+  // Ephemeral section
+  const ephemeralParts: string[] = [];
   for (const t of running.slice(0, 2)) {
-    if (t.type === "recurring") {
-      parts.push(`🔄 "${t.name}"`);
-    } else {
-      parts.push(`"${t.name}" running`);
-    }
+    ephemeralParts.push(`"${t.name}" running`);
   }
   const moreRunning = running.length - 2;
-  if (moreRunning > 0) parts.push(`${moreRunning} running`);
+  if (moreRunning > 0) ephemeralParts.push(`${moreRunning} running`);
 
-  if (finished.length > 0) parts.push(`${finished.length} completed`);
+  if (finished.length > 0) ephemeralParts.push(`${finished.length} completed`);
 
-  return parts.length > 0 ? `📋 ${parts.join(", ")}` : undefined;
+  if (ephemeralParts.length > 0) {
+    sections.push(`📋 ${ephemeralParts.join(", ")}`);
+  }
+
+  return sections.length > 0 ? sections.join("  ") : undefined;
 }
