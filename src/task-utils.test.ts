@@ -43,7 +43,7 @@ describe("extension commands", () => {
     assert.match(source, /\.background-tasks/);
   });
 
-  it("uses amber custom messages for finished-task notifications instead of user follow-ups", async () => {
+  it("uses amber custom messages that wake the agent for finished-task notifications", async () => {
     // Arrange
     const source = await readFile(new URL("../index.ts", import.meta.url), "utf8");
 
@@ -51,6 +51,8 @@ describe("extension commands", () => {
     assert.match(source, /registerMessageRenderer\("background-task"/);
     assert.match(source, /customType: "background-task"/);
     assert.match(source, /details: \{ status \}/);
+    assert.match(source, /const shouldWakeAgent = status === "completed" \|\| status === "failed";/);
+    assert.match(source, /pi\?\.sendMessage\(\{[\s\S]*customType: "background-task"[\s\S]*details: \{ status \},[\s\S]*\}, \{[\s\S]*deliverAs: "followUp"[\s\S]*triggerTurn: shouldWakeAgent[\s\S]*\}\);/);
     assert.doesNotMatch(source, /sendUserMessage\(content, \{ deliverAs: "followUp" \}\)/);
   });
 

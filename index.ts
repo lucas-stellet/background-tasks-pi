@@ -44,11 +44,15 @@ let idle = true;
 const notifier: Notifier = {
   isIdle: () => idle,
   sendMessage: (content, status) => {
+    const shouldWakeAgent = status === "completed" || status === "failed";
     pi?.sendMessage({
       customType: "background-task",
       content,
       display: true,
       details: { status },
+    }, {
+      deliverAs: "followUp",
+      triggerTurn: shouldWakeAgent,
     });
   },
 };
