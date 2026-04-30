@@ -36,12 +36,20 @@ export function createNotificationQueue(notifier: Notifier) {
     if (pending.length === 0) return [];
 
     const delivered = pending.map((n) => n.summary);
-    const status = pending.some((n) => n.status === "failed")
-      ? "failed"
-      : pending.some((n) => n.status === "completed")
-        ? "completed"
-        : pending[0]!.status;
-    const content = [`🔔 Background task notifications:`, ...pending.map((n) => `- ${n.summary}`)].join("\n");
+    const failedCount = pending.filter((n) => n.status === "failed").length;
+    const completedCount = pending.filter((n) => n.status === "completed").length;
+    const hasMixedTerminalStatuses = failedCount > 0 && completedCount > 0;
+    const status = hasMixedTerminalStatuses
+      ? "mixed"
+      : failedCount > 0
+        ? "failed"
+        : completedCount > 0
+          ? "completed"
+          : pending[0]!.status;
+    const countSummary = hasMixedTerminalStatuses
+      ? [`${failedCount} failed, ${completedCount} completed`]
+      : [];
+    const content = [`🔔 Background task notifications:`, ...countSummary, ...pending.map((n) => `- ${n.summary}`)].join("\n");
 
     notifier.sendMessage(content, status);
     pending = [];

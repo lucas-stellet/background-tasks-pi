@@ -103,4 +103,35 @@ describe("background task message renderer", () => {
     assert.doesNotMatch(output, /Background task notifications:/);
     assert.match(output, /amber notification smoke test: exit 0/);
   });
+
+  it("renders mixed batches with a neutral notifications title", () => {
+    // Arrange
+    const component = createBackgroundTaskMessage({
+      content: "🔔 Background task notifications:\n1 failed, 1 completed\n- ✗ lint: exit code 1\n- ✓ test: exit 0 in 1.0s",
+      status: "mixed",
+      theme: fakeTheme,
+    });
+
+    // Act
+    const output = component.render(80).join("\n");
+
+    // Assert
+    assert.match(output, /Background task notifications/);
+    assert.doesNotMatch(output, /Background task failed/);
+  });
+
+  it("truncates long result paths by preserving the task directory and result filename", () => {
+    // Arrange
+    const component = createBackgroundTaskMessage({
+      content: "Result: /Users/lucas/dev/projects/background-tasks-pi/.background-tasks/task_1777522809472_4/result.md",
+      status: "completed",
+      theme: fakeTheme,
+    });
+
+    // Act
+    const output = component.render(70).join("\n");
+
+    // Assert
+    assert.match(output, /\.\.\/.background-tasks\/task_1777522809472_4\/result\.md/);
+  });
 });

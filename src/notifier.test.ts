@@ -110,8 +110,9 @@ describe("NotificationQueue", () => {
 
     assert.deepEqual(flushed, ["task A done", "task B failed"]);
     assert.equal(delivered.length, 1);
-    assert.equal(delivered[0]?.status, "failed");
+    assert.equal(delivered[0]?.status, "mixed");
     assert.match(delivered[0]?.content ?? "", /🔔 Background task notifications:/);
+    assert.match(delivered[0]?.content ?? "", /1 failed, 1 completed/);
     assert.match(delivered[0]?.content ?? "", /- task A done/);
     assert.match(delivered[0]?.content ?? "", /- task B failed/);
     assert.equal(queue.getPending().length, 0);
@@ -131,5 +132,22 @@ describe("NotificationQueue", () => {
     queue.flushCombined();
 
     assert.equal(delivered[0]?.status, "completed");
+  });
+
+  it("labels mixed combined notifications neutrally and includes status counts", () => {
+    const delivered: Array<{ content: string; status: string }> = [];
+    const notifier: Notifier = {
+      isIdle: () => false,
+      sendMessage: (content, status) => { delivered.push({ content, status }); },
+    };
+
+    const queue = createNotificationQueue(notifier);
+    queue.notify("✓ build: exit 0 in 1.0s", "completed");
+    queue.notify("✗ lint: exit code 1", "failed");
+
+    queue.flushCombined();
+
+    assert.equal(delivered[0]?.status, "mixed");
+    assert.match(delivered[0]?.content ?? "", /1 failed, 1 completed/);
   });
 });

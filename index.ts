@@ -44,7 +44,7 @@ let idle = true;
 const notifier: Notifier = {
   isIdle: () => idle,
   sendMessage: (content, status) => {
-    const shouldWakeAgent = status === "completed" || status === "failed";
+    const shouldWakeAgent = status === "completed" || status === "failed" || status === "mixed";
     pi?.sendMessage({
       customType: "background-task",
       content,
@@ -73,10 +73,10 @@ const runner = createTaskRunner({
     updateFooter();
     queue.notify(getSummary(task), "completed");
   },
-  onTaskError(task, error) {
+  onTaskError(task, _error) {
     manager.notifyTaskChanged(task);
     updateFooter();
-    queue.notify(`${task.name}: ${error}`, "failed");
+    queue.notify(getSummary(task), "failed");
   },
   onRecurringCycle(task) {
     manager.notifyTaskChanged(task);

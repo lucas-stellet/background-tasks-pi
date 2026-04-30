@@ -64,6 +64,7 @@ function pad(text: string, width: number): string {
 function titleFor(status: string): string {
   if (status === "completed") return "⚡ Background task completed";
   if (status === "failed") return "⚠ Background task failed";
+  if (status === "mixed") return "🔔 Background task notifications";
   return "🔔 Background task update";
 }
 
@@ -77,9 +78,34 @@ function renderBottomBorder(width: number): string {
   return `╰${"─".repeat(Math.max(0, width - 2))}╯`;
 }
 
+function truncateMiddle(text: string, width: number): string {
+  if (visibleWidth(text) <= width) return text;
+  if (width <= 3) return truncateToWidth("...", width);
+  return "..." + truncateToWidth(text.slice(Math.max(0, text.length - (width - 3))), width - 3);
+}
+
+function formatBodyContent(content: string, width: number): string {
+  const cleanContent = content.replace(/\t/g, "  ");
+  const resultMatch = cleanContent.match(/^(\s*Result:\s*)(.+)$/);
+  if (!resultMatch) return cleanContent;
+
+  const [, prefix, path] = resultMatch;
+  const pathWidth = width - visibleWidth(prefix);
+  if (pathWidth <= 0 || visibleWidth(path) <= pathWidth) return cleanContent;
+
+  const backgroundTaskIndex = path.indexOf(".background-tasks/");
+  if (backgroundTaskIndex >= 0) {
+    const suffix = path.slice(backgroundTaskIndex);
+    const compact = `.../${suffix}`;
+    if (visibleWidth(compact) <= pathWidth) return `${prefix}${compact}`;
+  }
+
+  return `${prefix}${truncateMiddle(path, pathWidth)}`;
+}
+
 function renderBodyLine(content: string, width: number): string {
   const innerWidth = Math.max(0, width - 4);
-  const text = pad(truncateToWidth(content.replace(/\t/g, "  "), innerWidth), innerWidth);
+  const text = pad(truncateToWidth(formatBodyContent(content, innerWidth), innerWidth), innerWidth);
   return `│ ${text} │`;
 }
 

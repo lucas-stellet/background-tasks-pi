@@ -51,9 +51,17 @@ describe("extension commands", () => {
     assert.match(source, /registerMessageRenderer\("background-task"/);
     assert.match(source, /customType: "background-task"/);
     assert.match(source, /details: \{ status \}/);
-    assert.match(source, /const shouldWakeAgent = status === "completed" \|\| status === "failed";/);
+    assert.match(source, /const shouldWakeAgent = status === "completed" \|\| status === "failed" \|\| status === "mixed";/);
     assert.match(source, /pi\?\.sendMessage\(\{[\s\S]*customType: "background-task"[\s\S]*details: \{ status \},[\s\S]*\}, \{[\s\S]*deliverAs: "followUp"[\s\S]*triggerTurn: shouldWakeAgent[\s\S]*\}\);/);
     assert.doesNotMatch(source, /sendUserMessage\(content, \{ deliverAs: "followUp" \}\)/);
+  });
+
+  it("includes result paths in failed task notifications", async () => {
+    // Arrange
+    const source = await readFile(new URL("../index.ts", import.meta.url), "utf8");
+
+    // Act / Assert
+    assert.match(source, /onTaskError\(task, _error\) \{[\s\S]*queue\.notify\(getSummary\(task\), "failed"\);/);
   });
 
   it("persists seen state through the task manager when task output is viewed", async () => {
