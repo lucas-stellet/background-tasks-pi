@@ -5,7 +5,7 @@ import { buildFooterText } from "./footer.ts";
 function t(overrides: Record<string, any> = {}): any {
   return {
     id: "test-1", type: "background", status: "running", name: "test",
-    command: "echo ok", createdAt: new Date().toISOString(), resultSeen: false,
+    command: "echo ok", createdAt: "2026-04-30T00:00:00.000Z", resultSeen: false,
     ...overrides,
   };
 }

@@ -34,6 +34,7 @@ import { createNotificationQueue, type Notifier } from "./src/notifier.ts";
 import { TaskBrowserModal } from "./src/task-browser-modal.ts";
 import { loadTaskBrowserConfig, saveTaskBrowserConfig } from "./src/task-browser-config.ts";
 import { filterTasks, formatTaskListForAgent, formatTaskStatusForAgent } from "./src/task-utils.ts";
+import { createBackgroundTaskMessage } from "./src/background-task-message.ts";
 
 // ── State ────────────────────────────────────────────────────────────
 let pi: ExtensionAPI | null = null;
@@ -43,11 +44,6 @@ let idle = true;
 const notifier: Notifier = {
   isIdle: () => idle,
   sendMessage: (content, status) => {
-    if (status === "completed" || status === "failed") {
-      pi?.sendUserMessage(content, { deliverAs: "followUp" });
-      return;
-    }
-
     pi?.sendMessage({
       customType: "background-task",
       content,
@@ -301,6 +297,16 @@ const cancelBackgroundTaskTool = defineTool({
 // ── Commands ──────────────────────────────────────────────────────────
 export default function (piArg: ExtensionAPI) {
   pi = piArg;
+
+  pi.registerMessageRenderer("background-task", (message, _options, theme) => {
+    const details = message.details as { status?: string } | undefined;
+    return createBackgroundTaskMessage({
+      content: String(message.content ?? ""),
+      status: details?.status ?? "update",
+      theme,
+    });
+  });
+
   pi.registerTool(runBackgroundTaskTool);
   pi.registerTool(runRecurringTaskTool);
   pi.registerTool(listBackgroundTasksTool);

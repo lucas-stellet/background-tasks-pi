@@ -43,11 +43,15 @@ describe("extension commands", () => {
     assert.match(source, /\.background-tasks/);
   });
 
-  it("uses follow-up user messages for finished-task notifications so busy agents are queued safely", async () => {
+  it("uses amber custom messages for finished-task notifications instead of user follow-ups", async () => {
+    // Arrange
     const source = await readFile(new URL("../index.ts", import.meta.url), "utf8");
 
-    assert.match(source, /status === "completed" \|\| status === "failed"/);
-    assert.match(source, /sendUserMessage\(content, \{ deliverAs: "followUp" \}\)/);
+    // Act / Assert
+    assert.match(source, /registerMessageRenderer\("background-task"/);
+    assert.match(source, /customType: "background-task"/);
+    assert.match(source, /details: \{ status \}/);
+    assert.doesNotMatch(source, /sendUserMessage\(content, \{ deliverAs: "followUp" \}\)/);
   });
 
   it("persists seen state through the task manager when task output is viewed", async () => {
