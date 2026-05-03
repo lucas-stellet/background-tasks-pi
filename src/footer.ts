@@ -3,7 +3,7 @@ import type { Task } from "./task-manager.ts";
 export function buildFooterText(tasks: Task[]): string | undefined {
   const visible = tasks
     .map((task, index) => ({ task, index }))
-    .filter(({ task }) => ["running", "pending", "queued", "recurring"].includes(task.status))
+    .filter(({ task }) => ["running", "pending", "queued"].includes(task.status))
     .sort((a, b) => {
       const byCreatedAt = new Date(b.task.createdAt).getTime() - new Date(a.task.createdAt).getTime();
       return byCreatedAt === 0 ? a.index - b.index : byCreatedAt;
@@ -12,16 +12,8 @@ export function buildFooterText(tasks: Task[]): string | undefined {
 
   if (visible.length === 0) return undefined;
 
-  const recurring = visible.filter((t) => t.status === "recurring");
   const running = visible.filter((t) => t.status === "running" || t.status === "pending" || t.status === "queued");
   const sections: string[] = [];
-
-  // Recurring section
-  if (recurring.length > 0) {
-    const names = recurring.slice(0, 2).map((t) => `"${t.name}" recurring`).join(", ");
-    const more = recurring.length > 2 ? `, +${recurring.length - 2} more` : "";
-    sections.push(`🔄 ${names}${more}`);
-  }
 
   // Ephemeral section
   const ephemeralParts: string[] = [];

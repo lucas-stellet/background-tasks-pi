@@ -10,7 +10,7 @@ interface Theme {
   bold?: (text: string) => string;
 }
 
-const TERMINAL_STATUSES = new Set(["completed", "failed"]);
+const TREE_STATUSES = new Set(["completed", "failed", "recurring"]);
 
 function stripAnsi(text: string): string {
   return text.replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, "");
@@ -31,27 +31,31 @@ function bold(theme: Theme, text: string): string {
   return theme.bold ? theme.bold(text) : text;
 }
 
-function terminalTasks(tasks: Task[]): Task[] {
+function treeTasks(tasks: Task[]): Task[] {
   return tasks
-    .filter((task) => TERMINAL_STATUSES.has(task.status) && !task.resultSeen)
-    .sort((a, b) => new Date(b.completedAt ?? b.createdAt).getTime() - new Date(a.completedAt ?? a.createdAt).getTime());
+    .filter((task) => task.status === "recurring" || (TREE_STATUSES.has(task.status) && !task.resultSeen))
+    .sort((a, b) => new Date(b.completedAt ?? b.updatedAt ?? b.createdAt).getTime() - new Date(a.completedAt ?? a.updatedAt ?? a.createdAt).getTime());
 }
 
 function statusGlyph(task: Task): string {
-  return task.status === "completed" ? "✓" : "✗";
+  if (task.status === "completed") return "✓";
+  if (task.status === "recurring") return "↻";
+  return "✗";
 }
 
 function statusText(task: Task): string {
   if (task.status === "completed") return `exit ${task.exitCode ?? 0}`;
+  if (task.status === "recurring") return `recurring every ${task.interval}s`;
   return task.error ?? (typeof task.exitCode === "number" ? `exit code ${task.exitCode}` : "failed");
 }
 
 function durationText(task: Task): string | undefined {
+  if (task.status === "recurring") return undefined;
   return typeof task.duration === "number" ? `${(task.duration / 1000).toFixed(1)}s` : undefined;
 }
 
 export function buildTaskTreeWidgetLines(tasks: Task[], theme: Theme = {}, width = 120): string[] {
-  const visible = terminalTasks(tasks);
+  const visible = treeTasks(tasks);
   if (visible.length === 0) return [];
 
   const title = visible.length === 1 ? "background task result" : `background task results (${visible.length})`;
@@ -61,11 +65,14 @@ export function buildTaskTreeWidgetLines(tasks: Task[], theme: Theme = {}, width
     const last = index === Math.min(visible.length, 5) - 1 && visible.length <= 5;
     const branch = last ? "└─" : "├─";
     const continuation = last ? "   " : "│  ";
-    const color = task.status === "completed" ? "success" : "error";
+    const color = task.status === "completed" ? "success" : task.status === "recurring" ? "accent" : "error";
     const parts = [statusText(task), durationText(task)].filter(Boolean).join(" · ");
 
     lines.push(`${fg(theme, "dim", branch)} ${fg(theme, color, statusGlyph(task))} ${bold(theme, task.name)} ${fg(theme, "dim", `· ${parts}`)}`);
-    lines.push(`${fg(theme, "dim", continuation)} ${fg(theme, "dim", `⎿  ${task.id}${task.resultPath ? ` · ${task.resultPath}` : ""}`)}`);
+    const detail = task.status === "recurring" && task.stdout?.trim()
+      ? `${task.id} · ${task.stdout.trim()}`
+      : `${task.id}${task.resultPath ? ` · ${task.resultPath}` : ""}`;
+    lines.push(`${fg(theme, "dim", continuation)} ${fg(theme, "dim", `⎿  ${detail}`)}`);
   }
 
   if (visible.length > 5) lines.push(fg(theme, "dim", `└─ +${visible.length - 5} more finished tasks`));

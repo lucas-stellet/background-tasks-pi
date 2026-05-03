@@ -31,10 +31,19 @@ describe("task tree widget", () => {
     assert.match(lines.join("\n"), /└─ ✗ fail · exit code 7 · 3\.0s/);
   });
 
-  it("excludes active, recurring, cancelled, and seen terminal tasks", () => {
+  it("renders recurring tasks in the background tree with a flow glyph", () => {
+    const lines = buildTaskTreeWidgetLines([
+      t({ id: "task-watch", type: "recurring", status: "recurring", name: "watch", interval: 10, stdout: "tick" }),
+    ]);
+
+    assert.match(lines.join("\n"), /background task result.*background/);
+    assert.match(lines.join("\n"), /└─ ↻ watch · recurring every 10s/);
+    assert.match(lines.join("\n"), /⎿  task-watch · tick/);
+  });
+
+  it("excludes active, cancelled, and seen terminal tasks", () => {
     assert.deepEqual(buildTaskTreeWidgetLines([
       t({ status: "running", resultSeen: false }),
-      t({ status: "recurring", resultSeen: false }),
       t({ status: "cancelled", resultSeen: false }),
       t({ status: "completed", resultSeen: true }),
       t({ status: "failed", resultSeen: true }),

@@ -44,49 +44,21 @@ describe("buildFooterText", () => {
   });
 
   // ── Recurring (🔄) ──
-  it("🔄 single recurring", () => {
-    assert.equal(buildFooterText([t({ type: "recurring", status: "recurring", name: "watch" })]), '🔄 "watch" recurring');
-  });
-
-  it("🔄 two recurring", () => {
+  it("returns undefined for recurring tasks because they render in the tree", () => {
     assert.equal(buildFooterText([
       t({ type: "recurring", status: "recurring", name: "watch" }),
       t({ type: "recurring", status: "recurring", name: "poll" }),
-    ]), '🔄 "watch" recurring, "poll" recurring');
-  });
-
-  it("🔄 3+ recurring shows count", () => {
-    assert.equal(buildFooterText([
-      t({ type: "recurring", status: "recurring", name: "w" }),
-      t({ type: "recurring", status: "recurring", name: "p" }),
-      t({ type: "recurring", status: "recurring", name: "c" }),
-    ]), '🔄 "w" recurring, "p" recurring, +1 more');
+    ]), undefined);
   });
 
   // ── Mixed (🔄 + 📋) ──
-  it("🔄 recurring + 📋 running", () => {
+  it("📋 running excludes recurring, completed, and failed tasks", () => {
     assert.equal(buildFooterText([
       t({ type: "recurring", status: "recurring", name: "watch" }),
       t({ name: "build" }),
-    ]), '🔄 "watch" recurring  📋 "build" running');
-  });
-
-  it("🔄 recurring excludes completed and failed tasks", () => {
-    assert.equal(buildFooterText([
-      t({ type: "recurring", status: "recurring", name: "watch" }),
       t({ name: "done", status: "completed" }),
       t({ name: "broken", status: "failed" }),
-    ]), '🔄 "watch" recurring');
-  });
-
-  it("🔄 2 recurring + 📋 running excludes completed and failed tasks", () => {
-    assert.equal(buildFooterText([
-      t({ type: "recurring", status: "recurring", name: "w" }),
-      t({ type: "recurring", status: "recurring", name: "p" }),
-      t({ name: "build" }),
-      t({ name: "done", status: "completed" }),
-      t({ name: "broken", status: "failed" }),
-    ]), '🔄 "w" recurring, "p" recurring  📋 "build" running');
+    ]), '📋 "build" running');
   });
 
   it("excludes seen tasks", () => {
