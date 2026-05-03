@@ -1,6 +1,6 @@
 import type { Task } from "./task-manager.ts";
 
-export type TaskFilter = "all" | "active" | "completed" | "failed" | undefined;
+export type TaskFilter = "current" | "all" | "active" | "completed" | "failed" | undefined;
 export type TaskStatusFilter = "all" | "active" | "completed" | "failed" | "cancelled";
 export type TaskPeriodFilter = "session" | "24h" | "7d" | "all";
 
@@ -73,12 +73,11 @@ export function applyTaskBrowserFilters(tasks: Task[], preferences: TaskBrowserP
 }
 
 export function filterTasks(tasks: Task[], filter: TaskFilter): Task[] {
-  if (filter === "active") {
-    return tasks.filter(isActive);
-  }
+  if (filter === "all") return tasks;
+  if (filter === "active") return tasks.filter(isActive);
   if (filter === "completed") return tasks.filter((t) => t.status === "completed");
   if (filter === "failed") return tasks.filter((t) => t.status === "failed");
-  return tasks;
+  return tasks.filter((task) => isActive(task) || (["completed", "failed"].includes(task.status) && !task.resultSeen));
 }
 
 function formatDuration(task: Task): string {

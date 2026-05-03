@@ -216,14 +216,16 @@ const runRecurringTaskTool = defineTool({
 const listBackgroundTasksTool = defineTool({
   name: "list-background-tasks",
   label: "List Background Tasks",
-  description: "List all background tasks with their status as text for the agent.",
-  promptSnippet: "List background tasks with status filter (all/active/completed/failed)",
+  description: "List current background tasks by default, or historical tasks with an explicit filter.",
+  promptSnippet: "List current background tasks, or use a status filter (current/all/active/completed/failed)",
   promptGuidelines: [
     "Use list-background-tasks when the user asks 'what tasks are running?' or wants to see background task status.",
+    "Without a filter, list only the current task section: active/recurring tasks plus unseen completed/failed tasks.",
+    "Use filter: all only when the user explicitly asks for historical/old tasks.",
     "The list-background-tasks tool returns text only; user-facing task browser widgets are available through the /tasks command.",
   ],
   parameters: Type.Object({
-    filter: Type.Optional(StringEnum(["all", "active", "completed", "failed"] as const)),
+    filter: Type.Optional(StringEnum(["current", "all", "active", "completed", "failed"] as const)),
   }),
 
   async execute(_id, params) {

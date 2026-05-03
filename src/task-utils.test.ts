@@ -144,6 +144,23 @@ describe("task utils", () => {
     assert.deepEqual(filterTasks(tasks, "active").map((t) => t.status), ["running", "queued", "recurring"]);
   });
 
+  it("defaults task listing to current visible tasks only", () => {
+    const tasks = [
+      task("completed", true),
+      task("failed", true),
+      task("cancelled", false),
+      task("completed", false),
+      task("failed", false),
+      task("running"),
+      task("queued"),
+      task("recurring"),
+    ];
+
+    assert.deepEqual(filterTasks(tasks, undefined).map((t) => t.status), ["completed", "failed", "running", "queued", "recurring"]);
+    assert.deepEqual(filterTasks(tasks, "current").map((t) => t.status), ["completed", "failed", "running", "queued", "recurring"]);
+    assert.equal(filterTasks(tasks, "all").length, 8);
+  });
+
   it("filters task browser tasks to the current session by default", () => {
     const tasks = [
       namedTask("old", "old task", "completed", "npm test", "2026-04-28T23:59:59.000Z"),
