@@ -31,7 +31,7 @@ describe("task tree widget", () => {
     assert.match(lines.join("\n"), /└─ ✗ fail · exit code 7 · 3\.0s/);
   });
 
-  it("renders recurring tasks in the background tree with last activity and last output lines", () => {
+  it("renders recurring tasks in the background tree without output preview lines", () => {
     const lines = buildTaskTreeWidgetLines([
       t({
         id: "task-watch",
@@ -44,14 +44,16 @@ describe("task tree widget", () => {
       }),
     ], {}, 120, new Date("2026-05-03T00:00:12.000Z").getTime());
 
-    assert.match(lines.join("\n"), /background task result.*background/);
-    assert.match(lines.join("\n"), /└─ ⟳ watch · recurring every 10s · active 7s ago/);
-    assert.match(lines.join("\n"), /old/);
-    assert.match(lines.join("\n"), /mid/);
-    assert.match(lines.join("\n"), /tick/);
+    const text = lines.join("\n");
+    assert.match(text, /background task result.*background/);
+    assert.match(text, /└─ ⟳ watch · recurring every 10s · active 7s ago/);
+    assert.doesNotMatch(text, /old/);
+    assert.doesNotMatch(text, /mid/);
+    assert.doesNotMatch(text, /tick/);
+    assert.doesNotMatch(text, /⎿/);
   });
 
-  it("renders running tasks with a spinner, activity, and only the last 3 output lines", () => {
+  it("renders running tasks with a spinner and activity but without output preview lines", () => {
     const lines = buildTaskTreeWidgetLines([
       t({
         id: "task-run",
@@ -65,9 +67,10 @@ describe("task tree widget", () => {
     const text = lines.join("\n");
     assert.match(text, /[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏] long build · running · active 2s ago/);
     assert.doesNotMatch(text, /one/);
-    assert.match(text, /two/);
-    assert.match(text, /three/);
-    assert.match(text, /four/);
+    assert.doesNotMatch(text, /two/);
+    assert.doesNotMatch(text, /three/);
+    assert.doesNotMatch(text, /four/);
+    assert.doesNotMatch(text, /⎿/);
   });
 
   it("excludes cancelled and seen terminal tasks", () => {

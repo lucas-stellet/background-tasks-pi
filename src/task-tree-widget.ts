@@ -13,7 +13,6 @@ interface Theme {
 const TREE_STATUSES = new Set(["completed", "failed", "recurring", "running"]);
 const SPINNER = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 const SPINNER_MS = 160;
-const OUTPUT_LINE_LIMIT = 3;
 
 const ANSI_PATTERN = /\x1b\[[0-?]*[ -/]*[@-~]/g;
 
@@ -106,14 +105,6 @@ function activityText(task: Task, now: number): string | undefined {
   return age === "now" ? "active now" : `active ${age} ago`;
 }
 
-function outputLines(task: Task): string[] {
-  return (task.stdout || task.stderr || "")
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .slice(-OUTPUT_LINE_LIMIT);
-}
-
 export function buildTaskTreeWidgetLines(tasks: Task[], theme: Theme = {}, width = 120, now = Date.now()): string[] {
   const visible = treeTasks(tasks);
   if (visible.length === 0) return [];
@@ -129,16 +120,6 @@ export function buildTaskTreeWidgetLines(tasks: Task[], theme: Theme = {}, width
     const parts = [statusText(task), durationText(task), activityText(task, now)].filter(Boolean).join(" · ");
 
     lines.push(`${fg(theme, "dim", branch)} ${fg(theme, color, statusGlyph(task, now))} ${bold(theme, task.name)} ${fg(theme, "dim", `· ${parts}`)}`);
-    const recentOutput = outputLines(task);
-    if (recentOutput.length > 0) {
-      for (const [lineIndex, line] of recentOutput.entries()) {
-        const marker = lineIndex === 0 ? "⎿  " : "   ";
-        lines.push(`${fg(theme, "dim", continuation)} ${fg(theme, "dim", `${marker}${line}`)}`);
-      }
-    } else {
-      const detail = `${task.id}${task.resultPath ? ` · ${task.resultPath}` : ""}`;
-      lines.push(`${fg(theme, "dim", continuation)} ${fg(theme, "dim", `⎿  ${detail}`)}`);
-    }
   }
 
   if (visible.length > 5) lines.push(fg(theme, "dim", `└─ +${visible.length - 5} more finished tasks`));
