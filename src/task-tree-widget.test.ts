@@ -46,7 +46,7 @@ describe("task tree widget", () => {
 
     const text = lines.join("\n");
     assert.match(text, /background task result.*background/);
-    assert.match(text, /└─ [⟳↻↺] watch · recurring every 10s · active 7s ago/);
+    assert.match(text, /└─ [◐◓◑◒] watch · recurring every 10s · active 7s ago/);
     assert.doesNotMatch(text, /old/);
     assert.doesNotMatch(text, /mid/);
     assert.doesNotMatch(text, /tick/);
@@ -66,9 +66,9 @@ describe("task tree widget", () => {
     const second = buildTaskTreeWidgetLines([task], {}, 120, 1000).join("\n");
     const third = buildTaskTreeWidgetLines([task], {}, 120, 2000).join("\n");
 
-    assert.match(first, /└─ ⟳ watch · recurring every 10s/);
-    assert.match(second, /└─ ↻ watch · recurring every 10s/);
-    assert.match(third, /└─ ↺ watch · recurring every 10s/);
+    assert.match(first, /└─ ◐ watch · recurring every 10s/);
+    assert.match(second, /└─ ◓ watch · recurring every 10s/);
+    assert.match(third, /└─ ◑ watch · recurring every 10s/);
   });
 
   it("renders running tasks with a spinner and activity but without output preview lines", () => {

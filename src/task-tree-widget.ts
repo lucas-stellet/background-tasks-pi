@@ -12,7 +12,7 @@ interface Theme {
 
 const TREE_STATUSES = new Set(["completed", "failed", "recurring", "running"]);
 const SPINNER = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
-const RECURRING_SPINNER = ["⟳", "↻", "↺"];
+const RECURRING_SPINNER = ["◐", "◓", "◑", "◒"];
 const SPINNER_MS = 160;
 const RECURRING_SPINNER_MS = 1000;
 
