@@ -56,12 +56,21 @@ describe("extension commands", () => {
     assert.doesNotMatch(source, /sendUserMessage\(content, \{ deliverAs: "followUp" \}\)/);
   });
 
-  it("includes result paths in failed task notifications", async () => {
+  it("includes result paths and inspection guidance in failed task notifications", async () => {
     // Arrange
     const source = await readFile(new URL("../index.ts", import.meta.url), "utf8");
 
     // Act / Assert
     assert.match(source, /onTaskError\(task, _error\) \{[\s\S]*queue\.notify\(getSummary\(task\), "failed"\);/);
+    assert.match(source, /Inspect with get-background-task-result/);
+  });
+
+  it("supports partial result inspection to protect context", async () => {
+    const source = await readFile(new URL("../index.ts", import.meta.url), "utf8");
+
+    assert.match(source, /tailLines: Type\.Optional/);
+    assert.match(source, /maxBytes: Type\.Optional/);
+    assert.match(source, /formatPartialOutput/);
   });
 
   it("persists seen state through the task manager when task output is viewed", async () => {

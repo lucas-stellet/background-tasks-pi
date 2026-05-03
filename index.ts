@@ -122,9 +122,9 @@ function getSummary(task: Task): string {
   const emoji = task.status === "completed" ? "✓" : task.status === "failed" ? "✗" : task.status === "recurring" ? "🔄" : task.status === "cancelled" ? "⊘" : "⏳";
   switch (task.status) {
     case "completed":
-      return `${emoji} ${task.name}: exit ${task.exitCode} in ${((task.duration ?? 0) / 1000).toFixed(1)}s${task.resultPath ? `\nResult: ${task.resultPath}` : ""}`;
+      return `${emoji} ${task.name}: exit ${task.exitCode} in ${((task.duration ?? 0) / 1000).toFixed(1)}s${task.resultPath ? `\nResult: ${task.resultPath}` : ""}\nInspect with get-background-task-result to view output and clear it from the task tree.`;
     case "failed":
-      return `${emoji} ${task.name}: ${task.error ?? "failed"}${task.resultPath ? `\nResult: ${task.resultPath}` : ""}`;
+      return `${emoji} ${task.name}: ${task.error ?? "failed"}${task.resultPath ? `\nResult: ${task.resultPath}` : ""}\nInspect with get-background-task-result to view output and clear it from the task tree.`;
     case "recurring":
       return `${emoji} ${task.name}: recurring every ${task.interval}s`;
     default:
@@ -271,6 +271,18 @@ const getBackgroundTaskStatusTool = defineTool({
   },
 });
 
+function formatPartialOutput(label: string, text: string | undefined, options: { tailLines?: number; maxBytes?: number }): string {
+  if (!text) return "";
+  let output = text;
+  if (typeof options.tailLines === "number") output = output.trimEnd().split("\n").slice(-Math.max(0, options.tailLines)).join("\n");
+  if (typeof options.maxBytes === "number" && Buffer.byteLength(output) > options.maxBytes) {
+    const bytes = Buffer.from(output);
+    output = bytes.subarray(Math.max(0, bytes.length - Math.max(0, options.maxBytes))).toString("utf8");
+    output = `… truncated to last ${options.maxBytes} bytes\n${output}`;
+  }
+  return `\n\n${label}:\n${output}`;
+}
+
 const getBackgroundTaskResultTool = defineTool({
   name: "get-background-task-result",
   label: "Get Task Result",
@@ -278,9 +290,15 @@ const getBackgroundTaskResultTool = defineTool({
   promptSnippet: "Retrieve stdout/stderr from completed or failed background tasks",
   promptGuidelines: [
     "Use get-background-task-result when the user wants to see the output of a specific completed task.",
+    "Use tailLines or maxBytes for large outputs to inspect only part of the result and protect context.",
+    "Calling this tool marks terminal tasks as seen and clears them from the task tree.",
     "The get-background-task-result tool returns text only; user-facing task browser widgets are available through the /tasks command.",
   ],
-  parameters: Type.Object({ taskId: Type.String({ description: "The task ID" }) }),
+  parameters: Type.Object({
+    taskId: Type.String({ description: "The task ID" }),
+    tailLines: Type.Optional(Type.Number({ description: "Only include the last N stdout/stderr lines" })),
+    maxBytes: Type.Optional(Type.Number({ description: "Only include the last N bytes of stdout/stderr after line filtering" })),
+  }),
 
   async execute(_id, params) {
     const task = manager.getTask(params.taskId);
@@ -290,8 +308,8 @@ const getBackgroundTaskResultTool = defineTool({
     updateTaskUi();
 
     let output = getSummary(task);
-    if (task.stdout) output += `\n\nSTDOUT:\n${task.stdout}`;
-    if (task.stderr) output += `\n\nSTDERR:\n${task.stderr}`;
+    output += formatPartialOutput("STDOUT", task.stdout, { tailLines: params.tailLines, maxBytes: params.maxBytes });
+    output += formatPartialOutput("STDERR", task.stderr, { tailLines: params.tailLines, maxBytes: params.maxBytes });
 
     return { content: [{ type: "text", text: output }], details: task };
   },
