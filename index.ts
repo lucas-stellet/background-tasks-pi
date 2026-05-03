@@ -99,9 +99,9 @@ function getSummary(task: Task): string {
   const emoji = task.status === "completed" ? "✓" : task.status === "failed" ? "✗" : task.status === "recurring" ? "🔄" : task.status === "cancelled" ? "⊘" : "⏳";
   switch (task.status) {
     case "completed":
-      return `${emoji} ${task.name}: exit ${task.exitCode} in ${((task.duration ?? 0) / 1000).toFixed(1)}s${task.resultPath ? `\nResult: ${task.resultPath}` : ""}\nInspect with get-background-task-result to view output and mark it seen in the task browser.`;
+      return `${emoji} ${task.name}: exit ${task.exitCode} in ${((task.duration ?? 0) / 1000).toFixed(1)}s`;
     case "failed":
-      return `${emoji} ${task.name}: ${task.error ?? "failed"}${task.resultPath ? `\nResult: ${task.resultPath}` : ""}\nInspect with get-background-task-result to view output and mark it seen in the task browser.`;
+      return `${emoji} ${task.name}: ${task.error ?? "failed"}`;
     case "recurring":
       return `${emoji} ${task.name}: recurring every ${task.interval}s`;
     default:
