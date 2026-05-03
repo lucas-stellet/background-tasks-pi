@@ -122,6 +122,7 @@ describe("TaskManager - project cwd results", () => {
       assert.equal(manager.getTasks().length, 1);
       assert.equal(manager.getTask("task-old")?.name, "old test");
       assert.equal(manager.getTask("task-old")?.resultPath, join(resultDir, "result.md"));
+      assert.equal(manager.getTask("task-old")?.resultSeen, true);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -204,6 +205,7 @@ describe("TaskManager - project cwd results", () => {
       const persisted = JSON.parse(await readFile(metadataPath, "utf8"));
       assert.equal(persisted.status, "cancelled");
       assert.equal(persisted.error, "interrupted by previous session shutdown");
+      assert.equal(persisted.resultSeen, true);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

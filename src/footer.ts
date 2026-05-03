@@ -3,7 +3,7 @@ import type { Task } from "./task-manager.ts";
 export function buildFooterText(tasks: Task[]): string | undefined {
   const visible = tasks
     .map((task, index) => ({ task, index }))
-    .filter(({ task }) => !task.resultSeen && ["running", "pending", "completed", "failed", "queued", "recurring"].includes(task.status))
+    .filter(({ task }) => ["running", "pending", "queued", "recurring"].includes(task.status))
     .sort((a, b) => {
       const byCreatedAt = new Date(b.task.createdAt).getTime() - new Date(a.task.createdAt).getTime();
       return byCreatedAt === 0 ? a.index - b.index : byCreatedAt;
@@ -14,8 +14,6 @@ export function buildFooterText(tasks: Task[]): string | undefined {
 
   const recurring = visible.filter((t) => t.status === "recurring");
   const running = visible.filter((t) => t.status === "running" || t.status === "pending" || t.status === "queued");
-  const finished = visible.filter((t) => t.status === "completed" || t.status === "failed");
-
   const sections: string[] = [];
 
   // Recurring section
@@ -32,8 +30,6 @@ export function buildFooterText(tasks: Task[]): string | undefined {
   }
   const moreRunning = running.length - 2;
   if (moreRunning > 0) ephemeralParts.push(`${moreRunning} running`);
-
-  if (finished.length > 0) ephemeralParts.push(`${finished.length} completed`);
 
   if (ephemeralParts.length > 0) {
     sections.push(`📋 ${ephemeralParts.join(", ")}`);

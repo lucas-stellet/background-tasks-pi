@@ -106,6 +106,10 @@ export function createTaskManager(options: TaskManagerOptions) {
           task.status = "cancelled";
           task.completedAt ??= new Date().toISOString();
           task.error ??= "interrupted by previous session shutdown";
+          task.resultSeen = true;
+          persistTask(task);
+        } else if (isTerminal(task)) {
+          task.resultSeen = true;
           persistTask(task);
         }
 

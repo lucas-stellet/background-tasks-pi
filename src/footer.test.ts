@@ -28,12 +28,19 @@ describe("buildFooterText", () => {
     assert.equal(buildFooterText([t({ name: "a" }), t({ name: "b" }), t({ name: "c" })]), '📋 "a" running, "b" running, 1 running');
   });
 
-  it("📋 running + completed", () => {
-    assert.equal(buildFooterText([t({ name: "b" }), t({ name: "d", status: "completed" })]), '📋 "b" running, 1 completed');
+  it("📋 running excludes completed and failed tasks", () => {
+    assert.equal(buildFooterText([
+      t({ name: "b" }),
+      t({ name: "d", status: "completed" }),
+      t({ name: "f", status: "failed" }),
+    ]), '📋 "b" running');
   });
 
-  it("📋 only completed", () => {
-    assert.equal(buildFooterText([t({ name: "a", status: "completed" }), t({ name: "b", status: "completed" })]), '📋 2 completed');
+  it("returns undefined for only completed and failed tasks", () => {
+    assert.equal(buildFooterText([
+      t({ name: "a", status: "completed" }),
+      t({ name: "b", status: "failed" }),
+    ]), undefined);
   });
 
   // ── Recurring (🔄) ──
@@ -64,20 +71,22 @@ describe("buildFooterText", () => {
     ]), '🔄 "watch" recurring  📋 "build" running');
   });
 
-  it("🔄 recurring + 📋 completed", () => {
+  it("🔄 recurring excludes completed and failed tasks", () => {
     assert.equal(buildFooterText([
       t({ type: "recurring", status: "recurring", name: "watch" }),
       t({ name: "done", status: "completed" }),
-    ]), '🔄 "watch" recurring  📋 1 completed');
+      t({ name: "broken", status: "failed" }),
+    ]), '🔄 "watch" recurring');
   });
 
-  it("🔄 2 recurring + 📋 running + completed", () => {
+  it("🔄 2 recurring + 📋 running excludes completed and failed tasks", () => {
     assert.equal(buildFooterText([
       t({ type: "recurring", status: "recurring", name: "w" }),
       t({ type: "recurring", status: "recurring", name: "p" }),
       t({ name: "build" }),
       t({ name: "done", status: "completed" }),
-    ]), '🔄 "w" recurring, "p" recurring  📋 "build" running, 1 completed');
+      t({ name: "broken", status: "failed" }),
+    ]), '🔄 "w" recurring, "p" recurring  📋 "build" running');
   });
 
   it("excludes seen tasks", () => {
