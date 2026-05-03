@@ -37,7 +37,7 @@ describe("task tree widget", () => {
     ]);
 
     assert.match(lines.join("\n"), /background task result.*background/);
-    assert.match(lines.join("\n"), /└─ ↻ watch · recurring every 10s/);
+    assert.match(lines.join("\n"), /└─ ⟳ watch · recurring every 10s/);
     assert.match(lines.join("\n"), /⎿  task-watch · tick/);
   });
 

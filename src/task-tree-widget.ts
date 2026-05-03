@@ -39,7 +39,7 @@ function treeTasks(tasks: Task[]): Task[] {
 
 function statusGlyph(task: Task): string {
   if (task.status === "completed") return "✓";
-  if (task.status === "recurring") return "↻";
+  if (task.status === "recurring") return "⟳";
   return "✗";
 }
 
