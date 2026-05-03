@@ -72,11 +72,12 @@ describe("extension commands", () => {
     assert.doesNotMatch(source, /task\.resultSeen = true/);
   });
 
-  it("persists seen state through the task manager when task lists are viewed", async () => {
+  it("keeps unseen terminal tasks in the tree when task lists are viewed", async () => {
     const source = await readFile(new URL("../index.ts", import.meta.url), "utf8");
 
-    assert.match(source, /manager\.markTasksSeen\(taskList\)/);
-    assert.match(source, /manager\.markTasksSeen\(list\)/);
+    assert.doesNotMatch(source, /manager\.markTasksSeen\(taskList\)/);
+    assert.doesNotMatch(source, /manager\.markTasksSeen\(list\)/);
+    assert.match(source, /onViewTask:[\s\S]*manager\.markTaskSeen\(taskId\)/);
   });
 
   it("loads and saves task browser preferences for the interactive modal", async () => {

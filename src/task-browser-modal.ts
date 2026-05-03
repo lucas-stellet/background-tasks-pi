@@ -133,6 +133,7 @@ export class TaskBrowserModal implements Component {
   private readonly onClose: () => void;
   private readonly onCancel: (taskId: string) => void;
   private readonly onPreferencesChange: (preferences: TaskBrowserPreferences) => void;
+  private readonly onViewTask: (taskId: string) => void;
   private readonly now: () => string;
   private state: TaskBrowserState;
   private searchMode = false;
@@ -158,6 +159,7 @@ export class TaskBrowserModal implements Component {
     onClose: () => void;
     onCancel: (taskId: string) => void;
     onPreferencesChange: (preferences: TaskBrowserPreferences) => void;
+    onViewTask?: (taskId: string) => void;
   }) {
     this.getTasks = options.getTasks ?? (() => options.tasks ?? []);
     this.now = options.now ?? (() => new Date().toISOString());
@@ -173,6 +175,7 @@ export class TaskBrowserModal implements Component {
     this.onClose = options.onClose;
     this.onCancel = options.onCancel;
     this.onPreferencesChange = options.onPreferencesChange;
+    this.onViewTask = options.onViewTask ?? (() => {});
     this.ensureScrollVisible();
   }
 
@@ -343,6 +346,7 @@ export class TaskBrowserModal implements Component {
       if (task) {
         this.screen = "detail";
         this.resetDetailState(task.id);
+        if (["completed", "failed", "cancelled"].includes(task.status)) this.onViewTask(task.id);
         this.tui.requestRender();
       }
       return;

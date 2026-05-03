@@ -35,10 +35,11 @@ import { TaskBrowserModal } from "./src/task-browser-modal.ts";
 import { loadTaskBrowserConfig, saveTaskBrowserConfig } from "./src/task-browser-config.ts";
 import { filterTasks, formatTaskListForAgent, formatTaskStatusForAgent } from "./src/task-utils.ts";
 import { createBackgroundTaskMessage } from "./src/background-task-message.ts";
+import { createTaskTreeWidget } from "./src/task-tree-widget.ts";
 
 // ── State ────────────────────────────────────────────────────────────
 let pi: ExtensionAPI | null = null;
-let currentCtx: { ui: { setStatus: (id: string, text: string | undefined) => void } } | null = null;
+let currentCtx: { ui: { setStatus: (id: string, text: string | undefined) => void; setWidget?: (id: string, component: unknown) => void } } | null = null;
 let idle = true;
 
 const notifier: Notifier = {
@@ -86,9 +87,15 @@ const runner = createTaskRunner({
 });
 
 // ── Helpers ───────────────────────────────────────────────────────────
-function updateFooter(): void {
+function updateTaskUi(): void {
   if (!currentCtx) return;
-  currentCtx.ui.setStatus("background-tasks", buildFooterText(manager.getTasks()));
+  const tasks = manager.getTasks();
+  currentCtx.ui.setStatus("background-tasks", buildFooterText(tasks));
+  currentCtx.ui.setWidget?.("background-tasks", createTaskTreeWidget(tasks));
+}
+
+function updateFooter(): void {
+  updateTaskUi();
 }
 
 function getSummary(task: Task): string {
@@ -202,9 +209,6 @@ const listBackgroundTasksTool = defineTool({
   async execute(_id, params) {
     const taskList = filterTasks(manager.getTasks(), params.filter);
 
-    manager.markTasksSeen(taskList);
-    updateFooter();
-
     return { content: [{ type: "text", text: formatTaskListForAgent(taskList) }], details: { count: taskList.length, tasks: taskList } };
   },
 });
@@ -261,7 +265,7 @@ const getBackgroundTaskResultTool = defineTool({
     if (!task) return { content: [{ type: "text", text: `Task not found: ${params.taskId}` }], details: { error: "not found" } };
 
     manager.markTaskSeen(params.taskId);
-    updateFooter();
+    updateTaskUi();
 
     let output = getSummary(task);
     if (task.stdout) output += `\n\nSTDOUT:\n${task.stdout}`;
@@ -327,8 +331,6 @@ export default function (piArg: ExtensionAPI) {
         return;
       }
 
-      manager.markTasksSeen(list);
-      updateFooter();
       const config = loadTaskBrowserConfig(manager.getCwd());
 
       if (ctx.ui) {
@@ -369,6 +371,10 @@ export default function (piArg: ExtensionAPI) {
               done(undefined);
             },
             onCancel: handleCancel,
+            onViewTask: (taskId: string) => {
+              manager.markTaskSeen(taskId);
+              updateTaskUi();
+            },
             onPreferencesChange: (preferences) => saveTaskBrowserConfig(manager.getCwd(), preferences),
           });
 
