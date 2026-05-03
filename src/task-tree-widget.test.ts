@@ -53,7 +53,7 @@ describe("task tree widget", () => {
     assert.doesNotMatch(text, /⎿/);
   });
 
-  it("animates recurring task glyphs as the tree refreshes", () => {
+  it("animates recurring task glyphs on each one-second tree refresh", () => {
     const task = t({
       id: "task-watch",
       type: "recurring",
@@ -63,11 +63,12 @@ describe("task tree widget", () => {
     });
 
     const first = buildTaskTreeWidgetLines([task], {}, 120, 0).join("\n");
-    const second = buildTaskTreeWidgetLines([task], {}, 120, 200).join("\n");
+    const second = buildTaskTreeWidgetLines([task], {}, 120, 1000).join("\n");
+    const third = buildTaskTreeWidgetLines([task], {}, 120, 2000).join("\n");
 
-    assert.match(first, /└─ [⟳↻↺] watch · recurring every 10s/);
-    assert.match(second, /└─ [⟳↻↺] watch · recurring every 10s/);
-    assert.notEqual(first, second);
+    assert.match(first, /└─ ⟳ watch · recurring every 10s/);
+    assert.match(second, /└─ ↻ watch · recurring every 10s/);
+    assert.match(third, /└─ ↺ watch · recurring every 10s/);
   });
 
   it("renders running tasks with a spinner and activity but without output preview lines", () => {

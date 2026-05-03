@@ -14,6 +14,7 @@ const TREE_STATUSES = new Set(["completed", "failed", "recurring", "running"]);
 const SPINNER = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 const RECURRING_SPINNER = ["⟳", "↻", "↺"];
 const SPINNER_MS = 160;
+const RECURRING_SPINNER_MS = 1000;
 
 const ANSI_PATTERN = /\x1b\[[0-?]*[ -/]*[@-~]/g;
 
@@ -76,7 +77,7 @@ function treeTasks(tasks: Task[]): Task[] {
 
 function statusGlyph(task: Task, now = Date.now()): string {
   if (task.status === "completed") return "✓";
-  if (task.status === "recurring") return RECURRING_SPINNER[Math.floor(now / SPINNER_MS) % RECURRING_SPINNER.length]!;
+  if (task.status === "recurring") return RECURRING_SPINNER[Math.floor(now / RECURRING_SPINNER_MS) % RECURRING_SPINNER.length]!;
   if (task.status === "running") return SPINNER[Math.floor(now / SPINNER_MS) % SPINNER.length]!;
   return "✗";
 }
