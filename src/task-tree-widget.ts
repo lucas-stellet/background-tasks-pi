@@ -15,15 +15,49 @@ const SPINNER = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", 
 const SPINNER_MS = 160;
 const OUTPUT_LINE_LIMIT = 3;
 
+const ANSI_PATTERN = /\x1b\[[0-?]*[ -/]*[@-~]/g;
+
 function stripAnsi(text: string): string {
-  return text.replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, "");
+  return text.replace(ANSI_PATTERN, "");
+}
+
+function charWidth(char: string): number {
+  const codePoint = char.codePointAt(0) ?? 0;
+  if (codePoint === 0xfe0f) return 0;
+  if (codePoint === 0x26a0 || codePoint === 0x26a1 || codePoint >= 0x1f000) return 2;
+  if (codePoint >= 0x1100 && (
+    codePoint <= 0x115f ||
+    codePoint === 0x2329 ||
+    codePoint === 0x232a ||
+    (codePoint >= 0x2e80 && codePoint <= 0xa4cf) ||
+    (codePoint >= 0xac00 && codePoint <= 0xd7a3) ||
+    (codePoint >= 0xf900 && codePoint <= 0xfaff) ||
+    (codePoint >= 0xfe10 && codePoint <= 0xfe19) ||
+    (codePoint >= 0xfe30 && codePoint <= 0xfe6f) ||
+    (codePoint >= 0xff00 && codePoint <= 0xff60) ||
+    (codePoint >= 0xffe0 && codePoint <= 0xffe6)
+  )) return 2;
+  return 1;
+}
+
+function visibleWidth(text: string): number {
+  let width = 0;
+  for (const char of stripAnsi(text)) width += charWidth(char);
+  return width;
 }
 
 function truncate(text: string, width: number): string {
   if (width <= 0) return "";
-  const clean = stripAnsi(text);
-  if (clean.length <= width) return text;
-  return clean.slice(0, Math.max(0, width - 1)) + "…";
+  if (visibleWidth(text) <= width) return text;
+  let output = "";
+  let used = 0;
+  for (const char of stripAnsi(text)) {
+    const nextWidth = charWidth(char);
+    if (used + nextWidth > Math.max(0, width - 1)) break;
+    output += char;
+    used += nextWidth;
+  }
+  return output + "…";
 }
 
 function fg(theme: Theme, color: string, text: string): string {
@@ -116,7 +150,8 @@ export function createTaskTreeWidget(tasks: Task[]): (_tui: unknown, theme: Them
   return (_tui, theme) => ({
     invalidate(): void {},
     render(width: number): string[] {
-      return buildTaskTreeWidgetLines(tasks, theme, width).map((line) => ` ${line}`);
+      const innerWidth = Math.max(0, width - 1);
+      return buildTaskTreeWidgetLines(tasks, theme, innerWidth).map((line) => ` ${line}`);
     },
   });
 }

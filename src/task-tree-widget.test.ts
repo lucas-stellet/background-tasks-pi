@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { buildTaskTreeWidgetLines } from "./task-tree-widget.ts";
+import { buildTaskTreeWidgetLines, createTaskTreeWidget } from "./task-tree-widget.ts";
 
 function t(overrides: Record<string, any> = {}): any {
   return {
@@ -76,5 +76,22 @@ describe("task tree widget", () => {
       t({ status: "completed", resultSeen: true }),
       t({ status: "failed", resultSeen: true }),
     ]), []);
+  });
+
+  it("keeps rendered lines within terminal width after the widget prefix", () => {
+    const componentFactory = createTaskTreeWidget([
+      t({
+        id: "task-wide",
+        status: "running",
+        name: "PR-186 CI monitor and squash merge",
+        stdout: "🚀".repeat(200),
+        lastOutputAt: "2026-05-03T00:00:10.000Z",
+      }),
+    ]);
+    const component = componentFactory(undefined, {});
+
+    for (const line of component.render(40)) {
+      assert.ok([...line].length <= 40, `line too long: ${line}`);
+    }
   });
 });
