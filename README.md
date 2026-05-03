@@ -24,7 +24,7 @@ It adds tools for one-off and recurring tasks, sends completion notifications, a
 
 ### UI behavior
 
-- Background task progress is not rendered in the pi footer/status area.
+- Background task progress is not rendered in the pi footer/status area; the compact task tree remains above the input.
 - Finished task notifications are queued while the agent is busy and delivered when it becomes idle.
 - Agent tools return text only; the interactive task browser is available through `/tasks`.
 - The task browser updates live while open and lets you inspect status, command output, duration, IDs, and task details.

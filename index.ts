@@ -33,11 +33,13 @@ import { TaskBrowserModal } from "./src/task-browser-modal.ts";
 import { loadTaskBrowserConfig, saveTaskBrowserConfig } from "./src/task-browser-config.ts";
 import { filterTasks, formatTaskListForAgent, formatTaskStatusForAgent } from "./src/task-utils.ts";
 import { createBackgroundTaskMessage } from "./src/background-task-message.ts";
+import { createTaskTreeWidget } from "./src/task-tree-widget.ts";
 
 // ── State ────────────────────────────────────────────────────────────
 let pi: ExtensionAPI | null = null;
 let currentCtx: { ui: { setStatus: (id: string, text: string | undefined) => void; setWidget?: (id: string, component: unknown) => void } } | null = null;
 let idle = true;
+let widgetTimer: ReturnType<typeof setInterval> | undefined;
 
 const notifier: Notifier = {
   isIdle: () => idle,
@@ -85,10 +87,29 @@ const runner = createTaskRunner({
 });
 
 // ── Helpers ───────────────────────────────────────────────────────────
+function hasLiveTreeTasks(tasks: Task[]): boolean {
+  return tasks.some((task) => task.status === "running" || task.status === "recurring");
+}
+
+function syncWidgetTimer(tasks: Task[]): void {
+  if (hasLiveTreeTasks(tasks)) {
+    if (widgetTimer) return;
+    widgetTimer = setInterval(() => updateTaskUi(), 1000);
+    widgetTimer.unref?.();
+    return;
+  }
+  if (widgetTimer) {
+    clearInterval(widgetTimer);
+    widgetTimer = undefined;
+  }
+}
+
 function updateTaskUi(): void {
+  const tasks = manager.getTasks();
+  syncWidgetTimer(tasks);
   if (!currentCtx) return;
   currentCtx.ui.setStatus("background-tasks", undefined);
-  currentCtx.ui.setWidget?.("background-tasks", undefined);
+  currentCtx.ui.setWidget?.("background-tasks", createTaskTreeWidget(tasks));
 }
 
 function updateFooter(): void {
@@ -430,6 +451,10 @@ export default function (piArg: ExtensionAPI) {
 
   pi.on("session_shutdown", async () => {
     currentCtx = null;
+    if (widgetTimer) {
+      clearInterval(widgetTimer);
+      widgetTimer = undefined;
+    }
     runner.cancelAll();
   });
 
