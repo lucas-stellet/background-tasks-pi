@@ -21,7 +21,6 @@
  *   f — follow output in detail view
  *   q/Esc — close modal
  *
- * Footer: shows up to 2 running tasks by name, + counts for rest
  * Notifications: queued when agent busy, delivered immediately when idle
  */
 
@@ -29,19 +28,16 @@ import { StringEnum, Type } from "@mariozechner/pi-ai";
 import { defineTool, type ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { createTaskManager, type Task } from "./src/task-manager.ts";
 import { createTaskRunner } from "./src/task-runner.ts";
-import { buildFooterText } from "./src/footer.ts";
 import { createNotificationQueue, type Notifier } from "./src/notifier.ts";
 import { TaskBrowserModal } from "./src/task-browser-modal.ts";
 import { loadTaskBrowserConfig, saveTaskBrowserConfig } from "./src/task-browser-config.ts";
 import { filterTasks, formatTaskListForAgent, formatTaskStatusForAgent } from "./src/task-utils.ts";
 import { createBackgroundTaskMessage } from "./src/background-task-message.ts";
-import { createTaskTreeWidget } from "./src/task-tree-widget.ts";
 
 // ── State ────────────────────────────────────────────────────────────
 let pi: ExtensionAPI | null = null;
 let currentCtx: { ui: { setStatus: (id: string, text: string | undefined) => void; setWidget?: (id: string, component: unknown) => void } } | null = null;
 let idle = true;
-let widgetTimer: ReturnType<typeof setInterval> | undefined;
 
 const notifier: Notifier = {
   isIdle: () => idle,
@@ -89,29 +85,10 @@ const runner = createTaskRunner({
 });
 
 // ── Helpers ───────────────────────────────────────────────────────────
-function hasLiveTreeTasks(tasks: Task[]): boolean {
-  return tasks.some((task) => task.status === "running" || task.status === "recurring");
-}
-
-function syncWidgetTimer(tasks: Task[]): void {
-  if (hasLiveTreeTasks(tasks)) {
-    if (widgetTimer) return;
-    widgetTimer = setInterval(() => updateTaskUi(), 1000);
-    widgetTimer.unref?.();
-    return;
-  }
-  if (widgetTimer) {
-    clearInterval(widgetTimer);
-    widgetTimer = undefined;
-  }
-}
-
 function updateTaskUi(): void {
-  const tasks = manager.getTasks();
-  syncWidgetTimer(tasks);
   if (!currentCtx) return;
-  currentCtx.ui.setStatus("background-tasks", buildFooterText(tasks));
-  currentCtx.ui.setWidget?.("background-tasks", createTaskTreeWidget(tasks));
+  currentCtx.ui.setStatus("background-tasks", undefined);
+  currentCtx.ui.setWidget?.("background-tasks", undefined);
 }
 
 function updateFooter(): void {
@@ -122,9 +99,9 @@ function getSummary(task: Task): string {
   const emoji = task.status === "completed" ? "✓" : task.status === "failed" ? "✗" : task.status === "recurring" ? "🔄" : task.status === "cancelled" ? "⊘" : "⏳";
   switch (task.status) {
     case "completed":
-      return `${emoji} ${task.name}: exit ${task.exitCode} in ${((task.duration ?? 0) / 1000).toFixed(1)}s${task.resultPath ? `\nResult: ${task.resultPath}` : ""}\nInspect with get-background-task-result to view output and clear it from the task tree.`;
+      return `${emoji} ${task.name}: exit ${task.exitCode} in ${((task.duration ?? 0) / 1000).toFixed(1)}s${task.resultPath ? `\nResult: ${task.resultPath}` : ""}\nInspect with get-background-task-result to view output and mark it seen in the task browser.`;
     case "failed":
-      return `${emoji} ${task.name}: ${task.error ?? "failed"}${task.resultPath ? `\nResult: ${task.resultPath}` : ""}\nInspect with get-background-task-result to view output and clear it from the task tree.`;
+      return `${emoji} ${task.name}: ${task.error ?? "failed"}${task.resultPath ? `\nResult: ${task.resultPath}` : ""}\nInspect with get-background-task-result to view output and mark it seen in the task browser.`;
     case "recurring":
       return `${emoji} ${task.name}: recurring every ${task.interval}s`;
     default:
@@ -143,7 +120,7 @@ const runBackgroundTaskTool = defineTool({
     "Use run-background-task for any command the user explicitly asks to run in background or async.",
     "Background commands run from the project cwd, not an isolated temp directory.",
     "Results are saved under .background-tasks/<task-id>/ with task.json, result.md, stdout.txt, and stderr.txt.",
-    "Always give the task a short, descriptive name so the user can identify it in the footer and notifications.",
+    "Always give the task a short, descriptive name so the user can identify it in notifications and task browser views.",
     "After starting a task, tell the user it's running — they'll get a notification when it completes.",
   ],
   parameters: Type.Object({
@@ -179,7 +156,7 @@ const runRecurringTaskTool = defineTool({
     "Recurring commands run from the project cwd, not an isolated temp directory.",
     "Results are saved under .background-tasks/<task-id>/ with task.json, result.md, stdout.txt, and stderr.txt.",
     "The task runs forever until cancelled with cancel-background-task.",
-    "Give it a descriptive name so the user can identify it in the footer.",
+    "Give it a descriptive name so the user can identify it in notifications and task browser views.",
   ],
   parameters: Type.Object({
     name: Type.String({ description: "Descriptive name for the task" }),
@@ -222,7 +199,7 @@ const listBackgroundTasksTool = defineTool({
     "Use list-background-tasks when the user asks 'what tasks are running?' or wants to see background task status.",
     "Without a filter, list only the current task section: active/recurring tasks plus unseen completed/failed tasks.",
     "Use filter: all only when the user explicitly asks for historical/old tasks.",
-    "The list-background-tasks tool returns text only; user-facing task browser widgets are available through the /tasks command.",
+    "The list-background-tasks tool returns text only; the user-facing task browser is available through the /tasks command.",
   ],
   parameters: Type.Object({
     filter: Type.Optional(StringEnum(["current", "all", "active", "completed", "failed"] as const)),
@@ -291,8 +268,8 @@ const getBackgroundTaskResultTool = defineTool({
   promptGuidelines: [
     "Use get-background-task-result when the user wants to see the output of a specific completed task.",
     "Use tailLines or maxBytes for large outputs to inspect only part of the result and protect context.",
-    "Calling this tool marks terminal tasks as seen and clears them from the task tree.",
-    "The get-background-task-result tool returns text only; user-facing task browser widgets are available through the /tasks command.",
+    "Calling this tool marks terminal tasks as seen in the task browser.",
+    "The get-background-task-result tool returns text only; the user-facing task browser is available through the /tasks command."
   ],
   parameters: Type.Object({
     taskId: Type.String({ description: "The task ID" }),
@@ -453,10 +430,6 @@ export default function (piArg: ExtensionAPI) {
 
   pi.on("session_shutdown", async () => {
     currentCtx = null;
-    if (widgetTimer) {
-      clearInterval(widgetTimer);
-      widgetTimer = undefined;
-    }
     runner.cancelAll();
   });
 

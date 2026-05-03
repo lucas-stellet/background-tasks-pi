@@ -81,7 +81,7 @@ describe("extension commands", () => {
     assert.doesNotMatch(source, /task\.resultSeen = true/);
   });
 
-  it("keeps unseen terminal tasks in the tree when task lists are viewed", async () => {
+  it("keeps unseen terminal tasks unmodified when task lists are viewed", async () => {
     const source = await readFile(new URL("../index.ts", import.meta.url), "utf8");
 
     assert.doesNotMatch(source, /manager\.markTasksSeen\(taskList\)/);

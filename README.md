@@ -4,7 +4,7 @@ A pi extension for running shell commands in the background while you keep worki
 
 Repository: https://github.com/lucas-stellet/background-tasks-pi
 
-It adds tools for one-off and recurring tasks, shows task state in the pi footer, and opens a keyboard-driven task browser for following live output, inspecting final results, or cancelling work.
+It adds tools for one-off and recurring tasks, sends completion notifications, and opens a keyboard-driven task browser for following live output, inspecting final results, or cancelling work.
 
 ## What it adds
 
@@ -24,7 +24,7 @@ It adds tools for one-off and recurring tasks, shows task state in the pi footer
 
 ### UI behavior
 
-- The footer shows active recurring tasks, running tasks, and finished tasks with unseen results.
+- Background task progress is not rendered in the pi footer/status area.
 - Finished task notifications are queued while the agent is busy and delivered when it becomes idle.
 - Agent tools return text only; the interactive task browser is available through `/tasks`.
 - The task browser updates live while open and lets you inspect status, command output, duration, IDs, and task details.
@@ -137,12 +137,11 @@ npm test
 
 Project layout:
 
-- `index.ts`: extension entry point, tool registration, commands, footer updates, and lifecycle hooks.
+- `index.ts`: extension entry point, tool registration, commands, notifications, and lifecycle hooks.
 - `src/task-manager.ts`: task creation, task IDs, in-memory task storage, and status updates.
 - `src/task-runner.ts`: shell process execution, output capture, result-file writing, timeouts, and cancellation.
 - `src/task-browser-modal.ts`: task browser TUI.
 - `src/task-browser-state.ts`: task browser filtering, search, and column sorting state.
-- `src/footer.ts`: footer text formatting.
 - `src/notifier.ts`: queued notification delivery.
 - `src/task-utils.ts`: task filtering and result visibility helpers.
 
