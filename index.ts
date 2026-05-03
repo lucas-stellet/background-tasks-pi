@@ -41,6 +41,7 @@ import { createTaskTreeWidget } from "./src/task-tree-widget.ts";
 let pi: ExtensionAPI | null = null;
 let currentCtx: { ui: { setStatus: (id: string, text: string | undefined) => void; setWidget?: (id: string, component: unknown) => void } } | null = null;
 let idle = true;
+let widgetTimer: ReturnType<typeof setInterval> | undefined;
 
 const notifier: Notifier = {
   isIdle: () => idle,
@@ -68,7 +69,8 @@ const runner = createTaskRunner({
   },
   onTaskOutput(task) {
     manager.notifyTaskChanged(task);
-  },
+    updateTaskUi();
+  }, 
   onTaskComplete(task) {
     manager.notifyTaskChanged(task);
     updateFooter();
@@ -87,9 +89,27 @@ const runner = createTaskRunner({
 });
 
 // ── Helpers ───────────────────────────────────────────────────────────
+function hasLiveTreeTasks(tasks: Task[]): boolean {
+  return tasks.some((task) => task.status === "running" || task.status === "recurring");
+}
+
+function syncWidgetTimer(tasks: Task[]): void {
+  if (hasLiveTreeTasks(tasks)) {
+    if (widgetTimer) return;
+    widgetTimer = setInterval(() => updateTaskUi(), 1000);
+    widgetTimer.unref?.();
+    return;
+  }
+  if (widgetTimer) {
+    clearInterval(widgetTimer);
+    widgetTimer = undefined;
+  }
+}
+
 function updateTaskUi(): void {
-  if (!currentCtx) return;
   const tasks = manager.getTasks();
+  syncWidgetTimer(tasks);
+  if (!currentCtx) return;
   currentCtx.ui.setStatus("background-tasks", buildFooterText(tasks));
   currentCtx.ui.setWidget?.("background-tasks", createTaskTreeWidget(tasks));
 }
@@ -413,6 +433,10 @@ export default function (piArg: ExtensionAPI) {
 
   pi.on("session_shutdown", async () => {
     currentCtx = null;
+    if (widgetTimer) {
+      clearInterval(widgetTimer);
+      widgetTimer = undefined;
+    }
     runner.cancelAll();
   });
 
