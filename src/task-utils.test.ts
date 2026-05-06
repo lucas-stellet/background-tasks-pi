@@ -51,7 +51,7 @@ describe("extension commands", () => {
     assert.match(source, /registerMessageRenderer\("background-task"/);
     assert.match(source, /customType: "background-task"/);
     assert.match(source, /details: \{ status \}/);
-    assert.match(source, /const shouldWakeAgent = status === "completed" \|\| status === "failed" \|\| status === "mixed";/);
+    assert.match(source, /const shouldWakeAgent = status === "completed" \|\| status === "failed" \|\| status === "mixed" \|\| status === "recurring";/);
     assert.match(source, /pi\?\.sendMessage\(\{[\s\S]*customType: "background-task"[\s\S]*details: \{ status \},[\s\S]*\}, \{[\s\S]*deliverAs: "followUp"[\s\S]*triggerTurn: shouldWakeAgent[\s\S]*\}\);/);
     assert.doesNotMatch(source, /sendUserMessage\(content, \{ deliverAs: "followUp" \}\)/);
   });

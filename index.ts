@@ -44,7 +44,7 @@ let widgetTimer: ReturnType<typeof setInterval> | undefined;
 const notifier: Notifier = {
   isIdle: () => idle,
   sendMessage: (content, status) => {
-    const shouldWakeAgent = status === "completed" || status === "failed" || status === "mixed";
+    const shouldWakeAgent = status === "completed" || status === "failed" || status === "mixed" || status === "recurring";
     pi?.sendMessage({
       customType: "background-task",
       content,
@@ -82,7 +82,7 @@ const runner = createTaskRunner({
   onRecurringCycle(task) {
     manager.notifyTaskChanged(task);
     updateFooter();
-    queue.notify(`${task.name}: ${task.stdout?.trim() || "(no output)"}`, "recurring");
+    queue.notify(`↻ ${task.name}: cycle complete. Use get-background-task-result with taskId ${task.id} to inspect.`, "recurring");
   },
 });
 
