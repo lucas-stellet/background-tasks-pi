@@ -24,8 +24,8 @@
  * Notifications: queued when agent busy, delivered immediately when idle
  */
 
-import { StringEnum, Type } from "@mariozechner/pi-ai";
-import { defineTool, type ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import { StringEnum, Type } from "@earendil-works/pi-ai";
+import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { createTaskManager, type Task } from "./src/task-manager.ts";
 import { createTaskRunner } from "./src/task-runner.ts";
 import { createNotificationQueue, type Notifier } from "./src/notifier.ts";

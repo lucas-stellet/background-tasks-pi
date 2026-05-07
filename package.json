@@ -6,9 +6,6 @@
   "author": "",
   "license": "MIT",
   "type": "module",
-  "pi": {
-    "extensions": ["./index.ts"]
-  },
   "scripts": {
     "test": "node --experimental-strip-types --test src/*.test.ts"
   }
