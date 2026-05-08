@@ -31,7 +31,7 @@ import { createTaskRunner } from "./src/task-runner.ts";
 import { createNotificationQueue, type Notifier } from "./src/notifier.ts";
 import { TaskBrowserModal } from "./src/task-browser-modal.ts";
 import { loadTaskBrowserConfig, saveTaskBrowserConfig } from "./src/task-browser-config.ts";
-import { filterTasks, formatTaskListForAgent, formatTaskStatusForAgent } from "./src/task-utils.ts";
+import { filterTasks, formatTaskListForAgent, formatTaskStatusForAgent, serializeTasks } from "./src/task-utils.ts";
 import { createBackgroundTaskMessage } from "./src/background-task-message.ts";
 import { createTaskTreeWidget } from "./src/task-tree-widget.ts";
 
@@ -49,7 +49,7 @@ const notifier: Notifier = {
       customType: "background-task",
       content,
       display: true,
-      details: { status },
+      details: { status, tasks: serializeTasks(manager.getTasks()) },
     }, {
       deliverAs: "followUp",
       triggerTurn: shouldWakeAgent,
@@ -64,6 +64,7 @@ const runner = createTaskRunner({
   onTaskStart(task) {
     manager.notifyTaskChanged(task);
     updateFooter();
+    queue.notify(getSummary(task), "running");
   },
   onTaskOutput(task) {
     manager.notifyTaskChanged(task);

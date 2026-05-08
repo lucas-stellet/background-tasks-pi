@@ -1,4 +1,4 @@
-import type { Task } from "./task-manager.ts";
+import type { Task, TaskStatus, TaskType } from "./task-manager.ts";
 
 export type TaskFilter = "current" | "all" | "active" | "completed" | "failed" | undefined;
 export type TaskStatusFilter = "all" | "active" | "completed" | "failed" | "cancelled";
@@ -149,4 +149,52 @@ export function markFinishedTasksSeen(tasks: Task[]): void {
   for (const task of tasks) {
     markTerminalTaskSeen(task);
   }
+}
+
+export interface SerializedTask {
+  id: string;
+  name: string;
+  command: string;
+  type: TaskType;
+  status: TaskStatus;
+  createdAt: string;
+  startedAt?: string;
+  completedAt?: string;
+  exitCode?: number;
+  duration?: number;
+  error?: string;
+  interval?: number;
+  stdoutTail?: string;
+  stderrTail?: string;
+}
+
+function tailText(text: string | undefined, maxBytes: number): string | undefined {
+  if (!text) return undefined;
+  const bytes = Buffer.byteLength(text);
+  if (bytes <= maxBytes) return text;
+  const buf = Buffer.from(text);
+  return buf.subarray(bytes - maxBytes).toString("utf8");
+}
+
+export function serializeTask(task: Task, tailBytes = 1000): SerializedTask {
+  return {
+    id: task.id,
+    name: task.name,
+    command: task.command,
+    type: task.type,
+    status: task.status,
+    createdAt: task.createdAt,
+    startedAt: task.startedAt,
+    completedAt: task.completedAt,
+    exitCode: task.exitCode,
+    duration: task.duration,
+    error: task.error,
+    interval: task.interval,
+    stdoutTail: tailText(task.stdout, tailBytes),
+    stderrTail: tailText(task.stderr, tailBytes),
+  };
+}
+
+export function serializeTasks(tasks: Task[], tailBytes = 1000): SerializedTask[] {
+  return tasks.map((task) => serializeTask(task, tailBytes));
 }

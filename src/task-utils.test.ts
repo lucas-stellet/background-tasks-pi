@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { applyTaskBrowserFilters, filterTasks, formatTaskListForAgent, formatTaskStatusForAgent, markFinishedTasksSeen, markTerminalTaskSeen } from "./task-utils.ts";
+import { applyTaskBrowserFilters, filterTasks, formatTaskListForAgent, formatTaskStatusForAgent, markFinishedTasksSeen, markTerminalTaskSeen, serializeTask, serializeTasks } from "./task-utils.ts";
 import type { Task } from "./task-manager.ts";
 
 function task(status: Task["status"], resultSeen = false): Task {
@@ -43,17 +43,24 @@ describe("extension commands", () => {
     assert.match(source, /\.background-tasks/);
   });
 
-  it("uses amber custom messages that wake the agent for finished-task notifications", async () => {
+  it("sends background task notifications with serialized task state in details", async () => {
     // Arrange
     const source = await readFile(new URL("../index.ts", import.meta.url), "utf8");
 
     // Act / Assert
     assert.match(source, /registerMessageRenderer\("background-task"/);
     assert.match(source, /customType: "background-task"/);
-    assert.match(source, /details: \{ status \}/);
+    assert.match(source, /serializeTasks/);
+    assert.match(source, /details: \{[\s\S]*status,[\s\S]*tasks/);
     assert.match(source, /const shouldWakeAgent = status === "completed" \|\| status === "failed" \|\| status === "mixed" \|\| status === "recurring";/);
-    assert.match(source, /pi\?\.sendMessage\(\{[\s\S]*customType: "background-task"[\s\S]*details: \{ status \},[\s\S]*\}, \{[\s\S]*deliverAs: "followUp"[\s\S]*triggerTurn: shouldWakeAgent[\s\S]*\}\);/);
+    assert.match(source, /pi\?\.sendMessage\(\{[\s\S]*customType: "background-task"[\s\S]*details: \{[\s\S]*status,[\s\S]*tasks: serializeTasks\(manager\.getTasks\(\)\)[\s\S]*\},[\s\S]*\}, \{[\s\S]*deliverAs: "followUp"[\s\S]*triggerTurn: shouldWakeAgent[\s\S]*\}\);/);
     assert.doesNotMatch(source, /sendUserMessage\(content, \{ deliverAs: "followUp" \}\)/);
+  });
+
+  it("notifies on task start so dashboard bubbles appear immediately", async () => {
+    const source = await readFile(new URL("../index.ts", import.meta.url), "utf8");
+
+    assert.match(source, /onTaskStart\(task\) \{[\s\S]*queue\.notify/);
   });
 
   it("omits result paths and inspection guidance from finished task notifications", async () => {
@@ -265,5 +272,128 @@ describe("task utils", () => {
     assert.match(text, /completed/);
     assert.match(text, /exit 0/);
     assert.match(text, /1\.2s/);
+  });
+});
+
+describe("serializeTask", () => {
+  it("serializes a task for wire transmission excluding internal paths", () => {
+    const t: Task = {
+      id: "task-wire",
+      type: "background",
+      status: "completed",
+      name: "wire test",
+      command: "npm test",
+      createdAt: "2026-05-07T00:00:00.000Z",
+      startedAt: "2026-05-07T00:00:01.000Z",
+      completedAt: "2026-05-07T00:00:03.000Z",
+      exitCode: 0,
+      duration: 2345,
+      error: undefined,
+      interval: undefined,
+      resultSeen: false,
+      cwd: "/some/project",
+      resultDir: "/some/project/.background-tasks/task-wire",
+      stdoutPath: "/some/project/.background-tasks/task-wire/stdout.txt",
+      stderrPath: "/tmp/stderr.txt",
+      resultPath: "/tmp/result.md",
+      metadataPath: "/tmp/task.json",
+      isolatedDir: "/tmp/isolated",
+      stdout: "test output\nall passed",
+      stderr: undefined,
+    };
+
+    const serialized = serializeTask(t);
+
+    assert.equal(serialized.id, "task-wire");
+    assert.equal(serialized.name, "wire test");
+    assert.equal(serialized.command, "npm test");
+    assert.equal(serialized.type, "background");
+    assert.equal(serialized.status, "completed");
+    assert.equal(serialized.exitCode, 0);
+    assert.equal(serialized.duration, 2345);
+    assert.equal(serialized.error, undefined);
+    assert.equal(serialized.interval, undefined);
+    assert.equal(serialized.stdoutTail, "test output\nall passed");
+    assert.equal(serialized.stderrTail, undefined);
+
+    // Must not leak internal paths
+    const keys = Object.keys(serialized);
+    assert.ok(!keys.includes("cwd"), "must not include cwd");
+    assert.ok(!keys.includes("resultDir"), "must not include resultDir");
+    assert.ok(!keys.includes("stdoutPath"), "must not include stdoutPath");
+    assert.ok(!keys.includes("stderrPath"), "must not include stderrPath");
+    assert.ok(!keys.includes("resultPath"), "must not include resultPath");
+    assert.ok(!keys.includes("metadataPath"), "must not include metadataPath");
+    assert.ok(!keys.includes("isolatedDir"), "must not include isolatedDir");
+    assert.ok(!keys.includes("resultSeen"), "must not include resultSeen");
+    assert.ok(!keys.includes("stdout"), "must not include raw stdout");
+    assert.ok(!keys.includes("stderr"), "must not include raw stderr");
+  });
+
+  it("truncates stdout/stderr tails to the given byte limit", () => {
+    const stdout = "x".repeat(2000);
+    const stderr = "y".repeat(300);
+    const t: Task = {
+      id: "task-tail",
+      type: "background",
+      status: "failed",
+      name: "tail test",
+      command: "run",
+      createdAt: "2026-05-07T00:00:00.000Z",
+      exitCode: 1,
+      error: "boom",
+      resultSeen: false,
+      stdout,
+      stderr,
+    };
+
+    const serialized = serializeTask(t, 500);
+
+    assert.equal(serialized.stdoutTail?.length, 500);
+    assert.equal(serialized.stdoutTail, "x".repeat(500));
+    assert.equal(serialized.stderrTail, "y".repeat(300)); // under limit
+  });
+
+  it("handles a running recurring task", () => {
+    const t: Task = {
+      id: "task-recur",
+      type: "recurring",
+      status: "recurring",
+      name: "poll",
+      command: "curl localhost:3000/health",
+      interval: 30,
+      createdAt: "2026-05-07T00:00:00.000Z",
+      startedAt: "2026-05-07T00:00:00.000Z",
+      resultSeen: false,
+      stdout: "OK",
+    };
+
+    const serialized = serializeTask(t);
+
+    assert.equal(serialized.type, "recurring");
+    assert.equal(serialized.status, "recurring");
+    assert.equal(serialized.interval, 30);
+    assert.equal(serialized.exitCode, undefined);
+    assert.equal(serialized.duration, undefined);
+    assert.equal(serialized.stdoutTail, "OK");
+  });
+
+  it("serializeTasks returns an array of serialized tasks", () => {
+    const tasks: Task[] = [
+      { id: "t1", type: "background", status: "running", name: "a", command: "cmd1", createdAt: "2026-05-07T00:00:00.000Z", resultSeen: false },
+      { id: "t2", type: "background", status: "completed", name: "b", command: "cmd2", createdAt: "2026-05-07T00:00:01.000Z", duration: 1000, exitCode: 0, resultSeen: false },
+    ];
+
+    const result = serializeTasks(tasks);
+
+    assert.equal(result.length, 2);
+    assert.equal(result[0]!.id, "t1");
+    assert.equal(result[0]!.status, "running");
+    assert.equal(result[1]!.id, "t2");
+    assert.equal(result[1]!.status, "completed");
+  });
+
+  it("serializeTasks handles empty arrays", () => {
+    assert.deepEqual(serializeTasks([]), []);
   });
 });
