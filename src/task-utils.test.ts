@@ -131,6 +131,20 @@ describe("extension commands", () => {
 
     assert.match(source, /sessionStartedAt: manager\.getSessionStartedAt\(\)/);
   });
+
+  it("marks terminal tasks as seen on session_start so old results don't linger", async () => {
+    const source = await readFile(new URL("../index.ts", import.meta.url), "utf8");
+
+    assert.match(source, /pi\.on\("session_start"/);
+    assert.match(source, /manager\.markAllTerminalSeen\(\)/);
+  });
+
+  it("exposes /clear-tasks to let users dismiss task results from the header", async () => {
+    const source = await readFile(new URL("../index.ts", import.meta.url), "utf8");
+
+    assert.match(source, /registerCommand\("clear-tasks"/);
+    assert.match(source, /manager\.markAllTerminalSeen\(\)/);
+  });
 });
 
 describe("task utils", () => {

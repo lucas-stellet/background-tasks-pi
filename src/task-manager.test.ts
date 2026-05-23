@@ -228,3 +228,47 @@ describe("TaskManager - project cwd results", () => {
     assert.equal(task.isolatedDir, undefined);
   });
 });
+
+describe("TaskManager - markAllTerminalSeen", () => {
+  it("marks completed, failed, and cancelled tasks as seen", () => {
+    const manager = createTaskManager({});
+
+    const completed = manager.createBackground({ name: "c", command: "ok" });
+    completed.status = "completed";
+    completed.resultSeen = false;
+
+    const failed = manager.createBackground({ name: "f", command: "bad" });
+    failed.status = "failed";
+    failed.resultSeen = false;
+
+    const cancelled = manager.createBackground({ name: "x", command: "nope" });
+    cancelled.status = "cancelled";
+    cancelled.resultSeen = false;
+
+    const running = manager.createBackground({ name: "r", command: "live" });
+    running.status = "running";
+    running.resultSeen = false;
+
+    const recurring = manager.createRecurring({ name: "p", command: "poll", interval: 5 });
+    recurring.resultSeen = false;
+
+    manager.markAllTerminalSeen();
+
+    assert.equal(manager.getTask(completed.id)?.resultSeen, true);
+    assert.equal(manager.getTask(failed.id)?.resultSeen, true);
+    assert.equal(manager.getTask(cancelled.id)?.resultSeen, true);
+    assert.equal(manager.getTask(running.id)?.resultSeen, false);
+    assert.equal(manager.getTask(recurring.id)?.resultSeen, false);
+  });
+
+  it("is a no-op when there are no terminal tasks", () => {
+    const manager = createTaskManager({});
+    const running = manager.createBackground({ name: "r", command: "live" });
+    running.status = "running";
+
+    // Should not throw
+    manager.markAllTerminalSeen();
+
+    assert.equal(manager.getTask(running.id)?.resultSeen, false);
+  });
+});

@@ -21,6 +21,7 @@ It adds tools for one-off and recurring tasks, sends completion notifications, a
 
 - `/run-task <name> <command>`: start a background command from the chat input.
 - `/tasks`: open the task browser.
+- `/clear-tasks`: dismiss all completed, failed, and cancelled task results from the header widget. Results stay on disk and remain visible in `/tasks`.
 
 ### UI behavior
 
@@ -31,6 +32,7 @@ It adds tools for one-off and recurring tasks, sends completion notifications, a
 - Detail views follow live stdout/stderr while a task is running. When the task finishes, the open detail view refreshes to the completed, failed, or cancelled state without needing to leave and re-enter it.
 - If output follow mode is active, task completion scrolls to the newest final content. If you paused follow mode by scrolling up, the browser preserves your position and keeps scrolling usable.
 - Task results are saved under `.background-tasks/<task-id>/` in the project directory and reloaded on startup.
+- When a new conversation session starts, terminal tasks (completed, failed, cancelled) from previous sessions are automatically dismissed from the header widget so they don't accumulate across conversations. Running and recurring tasks are unaffected.
 
 ## Install
 

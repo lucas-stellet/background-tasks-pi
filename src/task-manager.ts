@@ -200,6 +200,15 @@ export function createTaskManager(options: TaskManagerOptions) {
       }
     },
 
+    markAllTerminalSeen(): void {
+      for (const task of tasks.values()) {
+        if (isTerminal(task)) {
+          task.resultSeen = true;
+          persistTask(task);
+        }
+      }
+    },
+
     getTask(id: string): Task | undefined {
       return tasks.get(id);
     },

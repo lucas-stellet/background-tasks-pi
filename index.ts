@@ -361,6 +361,20 @@ export default function (piArg: ExtensionAPI) {
   pi.registerTool(getBackgroundTaskResultTool);
   pi.registerTool(cancelBackgroundTaskTool);
 
+  pi.registerCommand("clear-tasks", {
+    description: "Dismiss completed and failed task results from the header",
+    handler: async (_args, ctx) => {
+      const terminal = manager.getTasks().filter((t) => ["completed", "failed", "cancelled"].includes(t.status) && !t.resultSeen);
+      if (terminal.length === 0) {
+        ctx.ui.notify("No task results to clear", "info");
+        return;
+      }
+      manager.markAllTerminalSeen();
+      updateFooter();
+      ctx.ui.notify(`Cleared ${terminal.length} task ${terminal.length === 1 ? "result" : "results"} from the header`, "info");
+    },
+  });
+
   pi.registerCommand("tasks", {
     description: "Open task browser modal",
     handler: async (_args, ctx) => {
@@ -447,6 +461,9 @@ export default function (piArg: ExtensionAPI) {
 
   pi.on("session_start", async (_event, ctx) => {
     currentCtx = ctx;
+    // Mark terminal tasks from previous sessions as seen so they don't
+    // linger in the header widget across conversations.
+    manager.markAllTerminalSeen();
     updateFooter();
   });
 
