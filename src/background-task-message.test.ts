@@ -14,7 +14,7 @@ function terminalColumnWidth(line: string): number {
   let width = 0;
   for (const char of line.replace(ansiPattern, "")) {
     const codePoint = char.codePointAt(0) ?? 0;
-    width += codePoint >= 0x1f300 ? 2 : 1;
+    width += codePoint === 0x23f3 || codePoint >= 0x1f300 ? 2 : 1;
   }
   return width;
 }
@@ -82,6 +82,21 @@ describe("background task message renderer", () => {
 
     // Assert
     assert.ok(lines.every((line) => terminalColumnWidth(line) <= 30));
+  });
+
+  it("keeps emoji-width body lines within the requested width", () => {
+    // Arrange
+    const component = createBackgroundTaskMessage({
+      content: "- ⏳ mix precommit before backordered commit final retry",
+      status: "running",
+      theme: fakeTheme,
+    });
+
+    // Act
+    const lines = component.render(43);
+
+    // Assert
+    assert.ok(lines.every((line) => terminalColumnWidth(line) <= 43));
   });
 
   it("removes redundant notification headings and leading bell icons from the card body", () => {

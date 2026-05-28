@@ -28,7 +28,19 @@ export interface BackgroundTaskMessageOptions {
 function charWidth(char: string): number {
   const codePoint = char.codePointAt(0) ?? 0;
   if (codePoint === 0xfe0f) return 0;
-  if (codePoint === 0x26a0 || codePoint === 0x26a1 || codePoint >= 0x1f000) return 2;
+  if (codePoint === 0x23f3 || codePoint === 0x26a0 || codePoint === 0x26a1 || codePoint >= 0x1f000) return 2;
+  if (codePoint >= 0x1100 && (
+    codePoint <= 0x115f ||
+    codePoint === 0x2329 ||
+    codePoint === 0x232a ||
+    (codePoint >= 0x2e80 && codePoint <= 0xa4cf) ||
+    (codePoint >= 0xac00 && codePoint <= 0xd7a3) ||
+    (codePoint >= 0xf900 && codePoint <= 0xfaff) ||
+    (codePoint >= 0xfe10 && codePoint <= 0xfe19) ||
+    (codePoint >= 0xfe30 && codePoint <= 0xfe6f) ||
+    (codePoint >= 0xff00 && codePoint <= 0xff60) ||
+    (codePoint >= 0xffe0 && codePoint <= 0xffe6)
+  )) return 2;
   return 1;
 }
 
