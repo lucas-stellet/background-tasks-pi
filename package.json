@@ -9,6 +9,10 @@
   "scripts": {
     "test": "node --experimental-strip-types --test src/*.test.ts"
   },
+  "peerDependencies": {
+    "@earendil-works/pi-ai": "*",
+    "@earendil-works/pi-coding-agent": "*"
+  },
   "pi": {
     "extensions": ["./index.ts"]
   }
