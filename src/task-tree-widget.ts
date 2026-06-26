@@ -111,20 +111,17 @@ export function buildTaskTreeWidgetLines(tasks: Task[], theme: Theme = {}, width
   const visible = treeTasks(tasks);
   if (visible.length === 0) return [];
 
-  const title = visible.length === 1 ? "background task result" : `background task results (${visible.length})`;
-  const lines = [`${fg(theme, "toolTitle", bold(theme, title))} ${fg(theme, "dim", "· background")}`];
+  const summary = visible.length === 1 ? "1 task" : `${visible.length} tasks`;
+  const lines = [`◆ ${fg(theme, "toolTitle", bold(theme, "Background tasks"))} ${fg(theme, "dim", `· ${summary}`)}`];
 
-  for (const [index, task] of visible.slice(0, 5).entries()) {
-    const last = index === Math.min(visible.length, 5) - 1 && visible.length <= 5;
-    const branch = last ? "└─" : "├─";
-    const continuation = last ? "   " : "│  ";
+  for (const task of visible.slice(0, 5)) {
     const color = task.status === "completed" ? "success" : task.status === "recurring" || task.status === "running" ? "accent" : "error";
     const parts = [statusText(task), durationText(task), activityText(task, now)].filter(Boolean).join(" · ");
 
-    lines.push(`${fg(theme, "dim", branch)} ${fg(theme, color, statusGlyph(task, now))} ${bold(theme, task.name)} ${fg(theme, "dim", `· ${parts}`)}`);
+    lines.push(`  ${fg(theme, color, statusGlyph(task, now))} ${bold(theme, task.name)} ${fg(theme, "dim", `· ${parts}`)}`);
   }
 
-  if (visible.length > 5) lines.push(fg(theme, "dim", `└─ +${visible.length - 5} more finished tasks`));
+  if (visible.length > 5) lines.push(fg(theme, "dim", `  +${visible.length - 5} more tasks`));
 
   return lines.map((line) => truncate(line, width));
 }

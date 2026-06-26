@@ -26,9 +26,9 @@ describe("task tree widget", () => {
       t({ id: "task-fail", name: "fail", status: "failed", exitCode: 7, error: "exit code 7" }),
     ]);
 
-    assert.match(lines.join("\n"), /background task results \(2\).*background/);
-    assert.match(lines.join("\n"), /├─ ✓ ok · exit 0 · 3\.0s/);
-    assert.match(lines.join("\n"), /└─ ✗ fail · exit code 7 · 3\.0s/);
+    assert.match(lines.join("\n"), /◆ Background tasks · 2 tasks/);
+    assert.match(lines.join("\n"), /  ✓ ok · exit 0 · 3\.0s/);
+    assert.match(lines.join("\n"), /  ✗ fail · exit code 7 · 3\.0s/);
   });
 
   it("renders recurring tasks in the background tree without output preview lines", () => {
@@ -45,8 +45,8 @@ describe("task tree widget", () => {
     ], {}, 120, new Date("2026-05-03T00:00:12.000Z").getTime());
 
     const text = lines.join("\n");
-    assert.match(text, /background task result.*background/);
-    assert.match(text, /└─ [◐◓◑◒] watch · recurring every 10s · active 7s ago/);
+    assert.match(text, /◆ Background tasks · 1 task/);
+    assert.match(text, /  [◐◓◑◒] watch · recurring every 10s · active 7s ago/);
     assert.doesNotMatch(text, /old/);
     assert.doesNotMatch(text, /mid/);
     assert.doesNotMatch(text, /tick/);
@@ -66,9 +66,9 @@ describe("task tree widget", () => {
     const second = buildTaskTreeWidgetLines([task], {}, 120, 1000).join("\n");
     const third = buildTaskTreeWidgetLines([task], {}, 120, 2000).join("\n");
 
-    assert.match(first, /└─ ◐ watch · recurring every 10s/);
-    assert.match(second, /└─ ◓ watch · recurring every 10s/);
-    assert.match(third, /└─ ◑ watch · recurring every 10s/);
+    assert.match(first, /  ◐ watch · recurring every 10s/);
+    assert.match(second, /  ◓ watch · recurring every 10s/);
+    assert.match(third, /  ◑ watch · recurring every 10s/);
   });
 
   it("renders running tasks with a spinner and activity but without output preview lines", () => {
