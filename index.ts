@@ -24,8 +24,11 @@
  * Notifications: queued when agent busy, delivered immediately when idle
  */
 
+import fs from "node:fs";
+import path from "node:path";
+import { createHash } from "node:crypto";
 import { StringEnum, Type } from "@earendil-works/pi-ai";
-import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { defineTool, getAgentDir, type ExtensionAPI, type ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { createTaskManager, type Task } from "./src/task-manager.ts";
 import { createTaskRunner } from "./src/task-runner.ts";
 import { createNotificationQueue, type Notifier } from "./src/notifier.ts";
@@ -33,11 +36,11 @@ import { TaskBrowserModal } from "./src/task-browser-modal.ts";
 import { loadTaskBrowserConfig, saveTaskBrowserConfig } from "./src/task-browser-config.ts";
 import { filterTasks, formatTaskListForAgent, formatTaskStatusForAgent, serializeTasks } from "./src/task-utils.ts";
 import { createBackgroundTaskMessage } from "./src/background-task-message.ts";
-import { createTaskTreeWidget } from "./src/task-tree-widget.ts";
+import { buildTaskTreeWidgetLines } from "./src/task-tree-widget.ts";
 
 // ── State ────────────────────────────────────────────────────────────
 let pi: ExtensionAPI | null = null;
-let currentCtx: { ui: { setStatus: (id: string, text: string | undefined) => void; setWidget?: (id: string, component: unknown) => void } } | null = null;
+let currentCtx: ExtensionContext | null = null;
 let idle = true;
 let widgetTimer: ReturnType<typeof setInterval> | undefined;
 
@@ -105,12 +108,85 @@ function syncWidgetTimer(tasks: Task[]): void {
   }
 }
 
+interface WidgetStackSection {
+  id: string;
+  title: string;
+  order: number;
+  priority?: number;
+  updatedAt: number;
+  ttlMs?: number;
+  lines: string[];
+  summary?: string;
+  active?: boolean;
+}
+
+function safeName(value: string): string {
+  return value.replace(/[^a-zA-Z0-9_.-]+/g, "_");
+}
+
+function getSessionId(ctx: ExtensionContext): string {
+  const explicitId = ctx.sessionManager.getSessionId?.();
+  if (explicitId) return safeName(explicitId);
+
+  const sessionFile = ctx.sessionManager.getSessionFile() ?? `ephemeral:${ctx.cwd}`;
+  return createHash("sha256").update(sessionFile).digest("hex").slice(0, 16);
+}
+
+async function publishWidgetSection(ctx: ExtensionContext, section: WidgetStackSection): Promise<void> {
+  const sessionId = getSessionId(ctx);
+  const dir = path.join(getAgentDir(), "widget-stack", "sessions", sessionId, "sections");
+  await fs.promises.mkdir(dir, { recursive: true });
+
+  const finalPath = path.join(dir, `${section.id}.json`);
+  const tmpPath = `${finalPath}.tmp`;
+  await fs.promises.writeFile(tmpPath, JSON.stringify(section, null, 2));
+  await fs.promises.rename(tmpPath, finalPath);
+}
+
+async function clearWidgetSection(ctx: ExtensionContext, id = "background-tasks"): Promise<void> {
+  const sessionId = getSessionId(ctx);
+  const filePath = path.join(getAgentDir(), "widget-stack", "sessions", sessionId, "sections", `${id}.json`);
+  await fs.promises.unlink(filePath).catch(() => undefined);
+}
+
+function buildBackgroundTasksSummary(tasks: Task[]): string {
+  const visible = tasks.filter((task) => task.status === "recurring" || task.status === "running" || ((task.status === "completed" || task.status === "failed" || task.status === "cancelled") && !task.resultSeen));
+  const running = visible.filter((task) => task.status === "running").length;
+  const recurring = visible.filter((task) => task.status === "recurring").length;
+  const failed = visible.filter((task) => task.status === "failed").length;
+  const completed = visible.filter((task) => task.status === "completed").length;
+
+  const parts: string[] = [];
+  if (running) parts.push(`${running} running`);
+  if (recurring) parts.push(`${recurring} recurring`);
+  if (failed) parts.push(`${failed} failed`);
+  if (completed) parts.push(`${completed} done`);
+  return parts.join(", ") || `${visible.length} tasks`;
+}
+
 function updateTaskUi(): void {
   const tasks = manager.getTasks();
   syncWidgetTimer(tasks);
   if (!currentCtx) return;
   currentCtx.ui.setStatus("background-tasks", undefined);
-  currentCtx.ui.setWidget?.("background-tasks", createTaskTreeWidget(tasks));
+
+  const lines = buildTaskTreeWidgetLines(tasks);
+  if (lines.length === 0) {
+    void clearWidgetSection(currentCtx);
+    return;
+  }
+
+  void publishWidgetSection(currentCtx, {
+    id: "background-tasks",
+    title: "Background tasks",
+    order: 20,
+    priority: 50,
+    updatedAt: Date.now(),
+    ttlMs: 5000,
+    active: hasLiveTreeTasks(tasks),
+    summary: buildBackgroundTasksSummary(tasks),
+    lines,
+  });
 }
 
 function updateFooter(): void {
@@ -467,7 +543,8 @@ export default function (piArg: ExtensionAPI) {
     updateFooter();
   });
 
-  pi.on("session_shutdown", async () => {
+  pi.on("session_shutdown", async (_event, ctx) => {
+    await clearWidgetSection(ctx);
     currentCtx = null;
     if (widgetTimer) {
       clearInterval(widgetTimer);
