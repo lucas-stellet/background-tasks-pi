@@ -112,7 +112,7 @@ export function buildTaskTreeWidgetLines(tasks: Task[], theme: Theme = {}, width
   if (visible.length === 0) return [];
 
   const summary = visible.length === 1 ? "1 task" : `${visible.length} tasks`;
-  const lines = [`◆ ${fg(theme, "toolTitle", bold(theme, "Background tasks"))} ${fg(theme, "dim", `· ${summary}`)}`];
+  const lines = [`⚙ ${fg(theme, "toolTitle", bold(theme, "Background tasks"))} ${fg(theme, "dim", `· ${summary}`)}`];
 
   for (const task of visible.slice(0, 5)) {
     const color = task.status === "completed" ? "success" : task.status === "recurring" || task.status === "running" ? "accent" : "error";

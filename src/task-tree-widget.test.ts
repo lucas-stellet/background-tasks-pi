@@ -26,7 +26,7 @@ describe("task tree widget", () => {
       t({ id: "task-fail", name: "fail", status: "failed", exitCode: 7, error: "exit code 7" }),
     ]);
 
-    assert.match(lines.join("\n"), /◆ Background tasks · 2 tasks/);
+    assert.match(lines.join("\n"), /⚙ Background tasks · 2 tasks/);
     assert.match(lines.join("\n"), /  ✓ ok · exit 0 · 3\.0s/);
     assert.match(lines.join("\n"), /  ✗ fail · exit code 7 · 3\.0s/);
   });
@@ -45,7 +45,7 @@ describe("task tree widget", () => {
     ], {}, 120, new Date("2026-05-03T00:00:12.000Z").getTime());
 
     const text = lines.join("\n");
-    assert.match(text, /◆ Background tasks · 1 task/);
+    assert.match(text, /⚙ Background tasks · 1 task/);
     assert.match(text, /  [◐◓◑◒] watch · recurring every 10s · active 7s ago/);
     assert.doesNotMatch(text, /old/);
     assert.doesNotMatch(text, /mid/);
