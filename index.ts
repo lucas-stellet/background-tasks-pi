@@ -138,7 +138,7 @@ async function publishWidgetSection(ctx: ExtensionContext, section: WidgetStackS
   await fs.promises.mkdir(dir, { recursive: true });
 
   const finalPath = path.join(dir, `${section.id}.json`);
-  const tmpPath = `${finalPath}.tmp`;
+  const tmpPath = `${finalPath}.${process.pid}.${Date.now()}.${Math.random().toString(16).slice(2)}.tmp`;
   await fs.promises.writeFile(tmpPath, JSON.stringify(section, null, 2));
   await fs.promises.rename(tmpPath, finalPath);
 }
@@ -172,7 +172,7 @@ function updateTaskUi(): void {
 
   const lines = buildTaskTreeWidgetLines(tasks);
   if (lines.length === 0) {
-    void clearWidgetSection(currentCtx);
+    void clearWidgetSection(currentCtx).catch(() => undefined);
     return;
   }
 
@@ -186,7 +186,7 @@ function updateTaskUi(): void {
     active: hasLiveTreeTasks(tasks),
     summary: buildBackgroundTasksSummary(tasks),
     lines,
-  });
+  }).catch(() => undefined);
 }
 
 function updateFooter(): void {
